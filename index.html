@@ -665,26 +665,38 @@
         }
 
         async function initMap() {
-            apiKey = document.getElementById('api-key').value.trim();
-            
-            if (!apiKey) {
-                alert('Please enter a MapTiler API key');
-                return;
+            try {
+                apiKey = document.getElementById('api-key').value.trim();
+                
+                if (!apiKey) {
+                    alert('Please enter a MapTiler API key');
+                    return;
+                }
+
+                console.log('Starting map initialization...');
+                document.getElementById('api-key-modal').classList.add('hidden');
+
+                // Initialize Leaflet map with MapTiler dark style
+                console.log('Creating map...');
+                map = L.map('map').setView([37.0902, -95.7129], 5);
+
+                L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
+                    attribution: '© MapTiler © OpenStreetMap contributors',
+                    maxZoom: 20
+                }).addTo(map);
+
+                console.log('Map created, loading cameras...');
+                // Load all cameras
+                await loadAllCameras();
+                console.log('Cameras loaded, adding to map...');
+                addCamerasToMap();
+                console.log('Complete!');
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                alert('Error loading map: ' + error.message);
+                document.getElementById('api-key-modal').classList.remove('hidden');
+                document.getElementById('loading').classList.add('hidden');
             }
-
-            document.getElementById('api-key-modal').classList.add('hidden');
-
-            // Initialize Leaflet map with MapTiler dark style
-            map = L.map('map').setView([37.0902, -95.7129], 5);
-
-            L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
-                attribution: '© MapTiler © OpenStreetMap contributors',
-                maxZoom: 20
-            }).addTo(map);
-
-            // Load all cameras
-            await loadAllCameras();
-            addCamerasToMap();
         }
 
         // Search functionality
