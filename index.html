@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Camera Map - TX/KS/OK</title>
+    <title>Traffic Camera Map - USA</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
@@ -27,7 +27,7 @@
             top: 60px;
             bottom: 0;
             width: 100%;
-            left: 380px;
+            left: 0;
         }
 
         .header {
@@ -253,6 +253,12 @@
             font-size: 12px;
         }
 
+        .popup-content .error-message {
+            color: #ef4444;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+
         .api-key-modal {
             position: fixed;
             top: 0;
@@ -357,6 +363,12 @@
 
             .stats-bar {
                 width: 100%;
+            }
+        }
+
+        @media (min-width: 769px) {
+            #map {
+                left: 380px;
             }
         }
     </style>
@@ -465,6 +477,7 @@
                     });
                 });
 
+                updateProgress(30, `Loaded ${count} cameras from USA database`);
                 return cameras;
             } catch (error) {
                 console.error('Error fetching USA cameras:', error);
@@ -474,7 +487,7 @@
 
         async function fetchGeoJSONData() {
             try {
-                updateProgress(30, 'Fetching TX/KS/OK camera data...');
+                updateProgress(40, 'Fetching TX/KS/OK camera data...');
                 const response = await fetch(GEOJSON_URL);
                 const geojsonData = await response.json();
                 const cameras = [];
@@ -492,7 +505,8 @@
 
                     const cameraUrl = props.camera_url || raw.url || '';
 
-                    if (cameraUrl) {
+                    if (feature.geometry && feature.geometry.coordinates) {
+                        const [lng, lat] = feature.geometry.coordinates;
                         const location = [city, county].filter(Boolean).join(', ') || roadway;
 
                         cameras.push({
@@ -501,294 +515,232 @@
                             description: location,
                             state: state,
                             county: county,
-                            city: city,
                             roadway: roadway,
-                            latitude: feature.geometry.coordinates[1],
-                            longitude: feature.geometry.coordinates[0],
+                            city: city,
+                            latitude: lat,
+                            longitude: lng,
                             direction: direction,
-                            provider: props.provider || 'regional'
+                            provider: 'geojson'
                         });
                     }
                 });
 
+                updateProgress(60, `Loaded ${cameras.length} cameras from GeoJSON`);
                 return cameras;
             } catch (error) {
-                console.error('Error fetching GeoJSON cameras:', error);
+                console.error('Error fetching GeoJSON data:', error);
                 return [];
             }
         }
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
-            updateProgress(5, 'Initializing...');
 
-            const usaCameras = await fetchUSACameras();
-            updateProgress(50, `Loaded ${usaCameras.length} USA cameras`);
+            const [usaCameras, geojsonCameras] = await Promise.all([
+                fetchUSACameras(),
+                fetchGeoJSONData()
+            ]);
 
-            const geoJsonCameras = await fetchGeoJSONData();
-            updateProgress(75, `Loaded ${geoJsonCameras.length} regional cameras`);
+            allCameras = [...usaCameras, ...geojsonCameras];
 
-            allCameras = [...usaCameras, ...geoJsonCameras];
-            filteredCameras = [...allCameras];
-
-            const uniqueStates = new Set(allCameras.map(c => c.state));
-            const camerasWithUrls = allCameras.filter(c => c.camera_url).length;
-
-            updateProgress(100, `Total: ${allCameras.length} cameras loaded`);
-
-            document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
-            document.getElementById('total-states').textContent = uniqueStates.size;
-            document.getElementById('cameras-with-urls').textContent = camerasWithUrls.toLocaleString();
-            document.getElementById('total-count').textContent = allCameras.length.toLocaleString();
-            document.getElementById('showing-count').textContent = allCameras.length.toLocaleString();
-
+            updateProgress(80, 'Processing cameras...');
+            
+            const states = [...new Set(allCameras.map(c => c.state).filter(Boolean))].sort();
             const stateFilter = document.getElementById('state-filter');
-            Array.from(uniqueStates).sort().forEach(state => {
+            states.forEach(state => {
                 const option = document.createElement('option');
                 option.value = state;
                 option.textContent = state;
                 stateFilter.appendChild(option);
             });
 
+            updateProgress(90, 'Adding markers to map...');
+            filterCameras();
+            updateStats();
+
+            updateProgress(100, 'Complete!');
             setTimeout(() => {
                 document.getElementById('loading').classList.add('hidden');
             }, 500);
         }
 
-        function createMarkerIcon(hasCamera) {
-            const color = hasCamera ? '#10b981' : '#666';
-            return L.divIcon({
-                className: 'custom-marker',
-                html: `<div style="
-                    width: 8px;
-                    height: 8px;
-                    background: ${color};
-                    border: 2px solid white;
-                    border-radius: 50%;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                "></div>`,
-                iconSize: [12, 12],
-                iconAnchor: [6, 6]
-            });
-        }
-
-        function isM3U8Url(url) {
-            return url && (url.includes('.m3u8') || url.includes('playlist'));
-        }
-
-        function createPopupContent(cam) {
-            let content = `
-                <div class="popup-content">
-                    <h4>${cam.name}</h4>
-                    <p><strong>State:</strong> ${cam.state}</p>
-            `;
-
-            if (cam.roadway) {
-                content += `<p><strong>Roadway:</strong> ${cam.roadway}</p>`;
-            }
-
-            if (cam.city) {
-                content += `<p><strong>City:</strong> ${cam.city}</p>`;
-            }
-
-            if (cam.county) {
-                content += `<p><strong>County:</strong> ${cam.county}</p>`;
-            }
-
-            if (cam.direction) {
-                content += `<p><strong>Direction:</strong> ${cam.direction}</p>`;
-            }
-
-            content += `<p><strong>Coordinates:</strong> ${cam.latitude.toFixed(6)}, ${cam.longitude.toFixed(6)}</p>`;
-
-            if (cam.camera_url) {
-                if (isM3U8Url(cam.camera_url)) {
-                    content += `
-                        <video controls autoplay muted style="width: 100%; max-width: 320px; border-radius: 4px; margin: 10px 0;">
-                            <source src="${cam.camera_url}" type="application/x-mpegURL">
-                            <p>Your browser does not support HLS video playback.</p>
-                        </video>
-                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Live stream (M3U8)</p>
-                    `;
-                } else {
-                    content += `
-                        <img src="${cam.camera_url}" alt="Camera view" loading="lazy" style="width: 100%; max-width: 320px; border-radius: 4px; margin: 10px 0;"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        <p style="color: #999; display: none; font-size: 12px;">Image failed to load</p>
-                    `;
-                }
-                content += `<a href="${cam.camera_url}" target="_blank" style="display: block; margin-top: 8px;">📹 View Full Size</a>`;
-            } else {
-                content += `<p style="color: #999;">No camera stream available</p>`;
-            }
-
-            content += `</div>`;
-            return content;
-        }
-
-        function addCamerasToMap() {
-            if (markerClusterGroup) {
-                map.removeLayer(markerClusterGroup);
-            }
-
-            markerClusterGroup = L.markerClusterGroup({
-                chunkedLoading: true,
-                chunkInterval: 200,
-                chunkDelay: 50,
-                maxClusterRadius: 50,
-                disableClusteringAtZoom: 15,
-                spiderfyOnMaxZoom: true,
-                showCoverageOnHover: false
-            });
-
-            filteredCameras.forEach(cam => {
-                const marker = L.marker([cam.latitude, cam.longitude], {
-                    icon: createMarkerIcon(!!cam.camera_url)
-                });
-
-                marker.on('click', function() {
-                    this.bindPopup(createPopupContent(cam), {
-                        maxWidth: 320,
-                        minWidth: 280
-                    }).openPopup();
-                });
-
-                markerClusterGroup.addLayer(marker);
-            });
-
-            map.addLayer(markerClusterGroup);
-            updateCameraList();
-        }
-
-        function updateCameraList() {
-            const listContainer = document.getElementById('camera-list');
-            listContainer.innerHTML = '';
-
-            const displayCameras = filteredCameras.slice(0, 100);
-            const fragment = document.createDocumentFragment();
-
-            displayCameras.forEach(cam => {
-                const item = document.createElement('div');
-                item.className = cam.camera_url ? 'camera-item online' : 'camera-item offline';
-                item.innerHTML = `
-                    <div class="camera-name">${cam.name}</div>
-                    <div class="camera-location">${cam.state}${cam.description ? ' • ' + cam.description : ''}${cam.direction ? ' • ' + cam.direction : ''}</div>
-                `;
-                item.onclick = () => {
-                    map.setView([cam.latitude, cam.longitude], 16);
-                    setTimeout(() => {
-                        markerClusterGroup.eachLayer(marker => {
-                            const markerLatLng = marker.getLatLng();
-                            if (Math.abs(markerLatLng.lat - cam.latitude) < 0.0001 &&
-                                Math.abs(markerLatLng.lng - cam.longitude) < 0.0001) {
-                                marker.fire('click');
-                            }
-                        });
-                    }, 300);
-                };
-                fragment.appendChild(item);
-            });
-
-            listContainer.appendChild(fragment);
-
-            if (filteredCameras.length > 100) {
-                const more = document.createElement('div');
-                more.style.cssText = 'padding: 12px; text-align: center; color: #999; font-size: 13px;';
-                more.textContent = `+ ${filteredCameras.length - 100} more cameras`;
-                listContainer.appendChild(more);
-            }
-        }
-
-        let filterTimeout;
-        function applyFiltersDebounced() {
-            clearTimeout(filterTimeout);
-            filterTimeout = setTimeout(() => {
-                addCamerasToMap();
-                document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
-            }, 300);
-        }
-
-        function applyFilters() {
-            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+        function filterCameras() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
             const stateFilter = document.getElementById('state-filter').value;
             const statusFilter = document.getElementById('status-filter').value;
 
-            filteredCameras = allCameras.filter(cam => {
-                const matchesSearch = !searchQuery ||
-                    cam.name.toLowerCase().includes(searchQuery) ||
-                    cam.state.toLowerCase().includes(searchQuery) ||
-                    (cam.description && cam.description.toLowerCase().includes(searchQuery)) ||
-                    (cam.county && cam.county.toLowerCase().includes(searchQuery)) ||
-                    (cam.city && cam.city.toLowerCase().includes(searchQuery)) ||
-                    (cam.roadway && cam.roadway.toLowerCase().includes(searchQuery));
+            filteredCameras = allCameras.filter(camera => {
+                const matchesSearch = !searchTerm || 
+                    camera.name.toLowerCase().includes(searchTerm) ||
+                    (camera.description && camera.description.toLowerCase().includes(searchTerm)) ||
+                    (camera.roadway && camera.roadway.toLowerCase().includes(searchTerm));
 
-                const matchesState = !stateFilter || cam.state === stateFilter;
+                const matchesState = !stateFilter || camera.state === stateFilter;
 
-                const matchesStatus = !statusFilter ||
-                    (statusFilter === 'online' && cam.camera_url) ||
-                    (statusFilter === 'offline' && !cam.camera_url);
+                const hasUrl = camera.camera_url && camera.camera_url.trim() !== '';
+                const matchesStatus = !statusFilter || 
+                    (statusFilter === 'online' && hasUrl) ||
+                    (statusFilter === 'offline' && !hasUrl);
 
                 return matchesSearch && matchesState && matchesStatus;
             });
 
-            applyFiltersDebounced();
+            updateCameraList();
+            updateMapMarkers();
+            updateStats();
         }
 
-        async function initMap() {
-            try {
-                apiKey = document.getElementById('api-key').value.trim();
+        function updateCameraList() {
+            const cameraList = document.getElementById('camera-list');
+            cameraList.innerHTML = '';
 
-                if (!apiKey) {
-                    alert('Please enter a MapTiler API key');
-                    return;
+            const displayLimit = 100;
+            const camerasToShow = filteredCameras.slice(0, displayLimit);
+
+            camerasToShow.forEach(camera => {
+                const item = document.createElement('div');
+                item.className = `camera-item ${camera.camera_url ? 'online' : 'offline'}`;
+                
+                const name = document.createElement('div');
+                name.className = 'camera-name';
+                name.textContent = camera.name;
+                
+                const location = document.createElement('div');
+                location.className = 'camera-location';
+                location.textContent = camera.description || `${camera.city || camera.county || camera.state}`;
+                
+                item.appendChild(name);
+                item.appendChild(location);
+                
+                item.onclick = () => {
+                    map.setView([camera.latitude, camera.longitude], 15);
+                };
+                
+                cameraList.appendChild(item);
+            });
+
+            if (filteredCameras.length > displayLimit) {
+                const moreItem = document.createElement('div');
+                moreItem.className = 'camera-item';
+                moreItem.style.textAlign = 'center';
+                moreItem.style.color = '#999';
+                moreItem.textContent = `+ ${filteredCameras.length - displayLimit} more cameras (zoom in to see)`;
+                cameraList.appendChild(moreItem);
+            }
+        }
+
+        function updateMapMarkers() {
+            if (markerClusterGroup) {
+                markerClusterGroup.clearLayers();
+            } else {
+                markerClusterGroup = L.markerClusterGroup();
+                map.addLayer(markerClusterGroup);
+            }
+
+            filteredCameras.forEach(camera => {
+                const marker = L.marker([camera.latitude, camera.longitude]);
+                
+                marker.on('click', () => {
+                    const popupContent = createPopupContent(camera);
+                    marker.bindPopup(popupContent, { maxWidth: 400 }).openPopup();
+                });
+
+                markerClusterGroup.addLayer(marker);
+            });
+        }
+
+        function createPopupContent(camera) {
+            let html = `
+                <div class="popup-content">
+                    <h4>${camera.name}</h4>
+                    <p><strong>Location:</strong> ${camera.description || camera.city || camera.county || camera.state}</p>
+                    ${camera.direction ? `<p><strong>Direction:</strong> ${camera.direction}</p>` : ''}
+                    ${camera.roadway ? `<p><strong>Roadway:</strong> ${camera.roadway}</p>` : ''}
+            `;
+
+            if (camera.camera_url) {
+                // Add timestamp to prevent caching for image URLs
+                const timestamp = Date.now();
+                
+                if (camera.format === 'M3U8' || camera.camera_url.includes('.m3u8')) {
+                    html += `
+                        <p style="color: #999; font-size: 12px;">Video stream available (M3U8 format)</p>
+                        <a href="${camera.camera_url}" target="_blank">Open Stream</a>
+                    `;
+                } else {
+                    // Assume it's an image URL
+                    const imageUrl = camera.camera_url.includes('?') 
+                        ? `${camera.camera_url}&t=${timestamp}`
+                        : `${camera.camera_url}?t=${timestamp}`;
+                    
+                    html += `
+                        <img src="${imageUrl}" 
+                             alt="${camera.name}" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                             onload="this.nextElementSibling.style.display='none';">
+                        <p class="error-message" style="display:none;">⚠️ Camera feed unavailable</p>
+                        <a href="${camera.camera_url}" target="_blank">View Full Stream</a>
+                    `;
                 }
-
-                localStorage.setItem('maptiler_api_key', apiKey);
-                document.getElementById('api-key-modal').style.display = 'none';
-                document.getElementById('loading').classList.remove('hidden');
-
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                map = L.map('map', {
-                    preferCanvas: true,
-                    zoomControl: true
-                }).setView([32.7767, -96.7970], 7);
-
-                L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
-                    attribution: '© MapTiler © OpenStreetMap contributors',
-                    maxZoom: 20,
-                    tileSize: 512,
-                    zoomOffset: -1
-                }).addTo(map);
-
-                await loadAllCameras();
-                addCamerasToMap();
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error loading map: ' + error.message);
-                document.getElementById('api-key-modal').style.display = 'flex';
-                document.getElementById('loading').classList.add('hidden');
+            } else {
+                html += `<p class="error-message">⚠️ No camera feed available</p>`;
             }
+
+            html += `</div>`;
+            return html;
         }
 
-        document.getElementById('search-input').addEventListener('input', applyFilters);
-        document.getElementById('state-filter').addEventListener('change', applyFilters);
-        document.getElementById('status-filter').addEventListener('change', applyFilters);
+        function updateStats() {
+            const states = new Set(allCameras.map(c => c.state).filter(Boolean));
+            const camerasWithUrls = allCameras.filter(c => c.camera_url && c.camera_url.trim() !== '');
 
-        window.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const apiKeyFromUrl = urlParams.get('key');
-            const savedApiKey = localStorage.getItem('maptiler_api_key');
+            document.getElementById('total-cameras').textContent = allCameras.length;
+            document.getElementById('total-states').textContent = states.size;
+            document.getElementById('cameras-with-urls').textContent = camerasWithUrls.length;
+            document.getElementById('showing-count').textContent = filteredCameras.length;
+            document.getElementById('total-count').textContent = allCameras.length;
+        }
 
-            if (apiKeyFromUrl) {
-                document.getElementById('api-key').value = apiKeyFromUrl;
-                initMap();
-            } else if (savedApiKey) {
-                document.getElementById('api-key').value = savedApiKey;
-                document.getElementById('api-key-modal').style.display = 'none';
-                initMap();
+        function initMap() {
+            apiKey = document.getElementById('api-key').value.trim();
+            if (!apiKey) {
+                alert('Please enter a valid MapTiler API key');
+                return;
             }
-        });
+
+            document.getElementById('api-key-modal').style.display = 'none';
+
+            map = L.map('map').setView([38.5, -98], 5);
+
+            L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
+                attribution: '&copy; <a href="https://www.maptiler.com/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                maxZoom: 19
+            }).addTo(map);
+
+            loadAllCameras();
+
+            document.getElementById('search-input').addEventListener('input', filterCameras);
+            document.getElementById('state-filter').addEventListener('change', filterCameras);
+            document.getElementById('status-filter').addEventListener('change', filterCameras);
+        }
+
+        // Auto-refresh camera images every 30 seconds
+        setInterval(() => {
+            if (map) {
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Popup && layer.isOpen()) {
+                        const img = layer.getElement().querySelector('img');
+                        if (img && img.src) {
+                            const timestamp = Date.now();
+                            const baseUrl = img.src.split('?')[0].split('&t=')[0];
+                            img.src = baseUrl.includes('?') 
+                                ? `${baseUrl}&t=${timestamp}`
+                                : `${baseUrl}?t=${timestamp}`;
+                        }
+                    }
+                });
+            }
+        }, 30000);
     </script>
 </body>
 </html>
