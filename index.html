@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Camera Map</title>
+    <title>Traffic Camera Map - TX/KS/OK</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
@@ -66,28 +66,6 @@
             margin-left: 5px;
         }
 
-        .btn {
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: none;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .btn-weather {
-            background: #3b82f6;
-            color: white;
-        }
-
-        .btn-mrms {
-            background: #3b82f6;
-            color: white;
-        }
-
         .sidebar {
             position: fixed;
             top: 60px;
@@ -141,30 +119,6 @@
             font-size: 14px;
         }
 
-        .toggle-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .toggle-btn {
-            flex: 1;
-            padding: 10px;
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            color: #999;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .toggle-btn.active {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
-        }
-
         .camera-list {
             margin-top: 20px;
         }
@@ -190,6 +144,12 @@
             margin-right: 8px;
         }
 
+        .camera-item.offline::before {
+            content: '●';
+            color: #666;
+            margin-right: 8px;
+        }
+
         .camera-name {
             font-size: 14px;
             font-weight: 500;
@@ -202,15 +162,20 @@
         }
 
         .stats-bar {
-            padding: 12px 20px;
-            background: #2a2a2a;
-            border-top: 1px solid #3a3a3a;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 380px;
+            background: #1a1a1a;
+            border-top: 1px solid #333;
+            padding: 15px 20px;
             font-size: 13px;
             color: #999;
         }
 
         .stats-bar span {
-            color: #3b82f6;
+            color: #fff;
+            font-weight: 600;
         }
 
         .loading {
@@ -219,11 +184,15 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: #1a1a1a;
-            padding: 30px 50px;
-            border-radius: 12px;
+            padding: 30px 40px;
+            border-radius: 10px;
             border: 1px solid #333;
-            z-index: 2000;
             text-align: center;
+            z-index: 2000;
+        }
+
+        .loading.hidden {
+            display: none;
         }
 
         .loading h3 {
@@ -231,7 +200,7 @@
         }
 
         .loading-bar {
-            width: 200px;
+            width: 300px;
             height: 4px;
             background: #2a2a2a;
             border-radius: 2px;
@@ -245,88 +214,43 @@
             transition: width 0.3s;
         }
 
-        .hidden {
-            display: none;
-        }
-
-        .leaflet-popup-content-wrapper {
-            background: #1a1a1a !important;
-            color: #fff !important;
-            border: 1px solid #333 !important;
-            border-radius: 8px !important;
-            padding: 0 !important;
-        }
-
-        .leaflet-popup-content {
-            margin: 15px !important;
-            min-width: 200px;
-        }
-
-        .leaflet-popup-close-button {
-            color: #fff !important;
-        }
-
-        .leaflet-popup-tip {
-            background: #1a1a1a !important;
-            border: 1px solid #333 !important;
+        .popup-content {
+            color: #000;
         }
 
         .popup-content h4 {
             margin: 0 0 10px 0;
-            font-size: 15px;
-            font-weight: 600;
+            font-size: 16px;
         }
 
         .popup-content p {
-            margin: 6px 0;
+            margin: 5px 0;
             font-size: 13px;
-            color: #ccc;
-        }
-
-        .popup-content strong {
-            color: #fff;
         }
 
         .popup-content img {
             width: 100%;
             height: auto;
-            border-radius: 6px;
-            margin-top: 10px;
-            max-height: 200px;
-            object-fit: cover;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .popup-content video {
+            width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
         }
 
         .popup-content a {
             display: inline-block;
-            margin-top: 10px;
-            padding: 8px 16px;
+            margin-top: 8px;
+            padding: 6px 12px;
             background: #3b82f6;
             color: white;
-            border-radius: 6px;
             text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .popup-content a:hover {
-            background: #2563eb;
-        }
-
-        .sidebar::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: #1a1a1a;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: #3a3a3a;
             border-radius: 4px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: #4a4a4a;
+            font-size: 12px;
         }
 
         .api-key-modal {
@@ -335,31 +259,29 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0, 0, 0, 0.9);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 2000;
+            z-index: 3000;
         }
 
         .modal-content {
             background: #1a1a1a;
+            padding: 40px;
+            border-radius: 10px;
             border: 1px solid #333;
-            border-radius: 12px;
-            padding: 30px;
             max-width: 500px;
             width: 90%;
         }
 
         .modal-content h2 {
-            margin-bottom: 10px;
-            font-size: 22px;
+            margin-bottom: 20px;
         }
 
         .modal-content p {
             color: #999;
             margin-bottom: 20px;
-            font-size: 14px;
         }
 
         .modal-content input {
@@ -381,7 +303,7 @@
             border: none;
             border-radius: 6px;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
         }
 
@@ -417,6 +339,26 @@
             color: #fff;
             font-weight: bold;
         }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                left: -100%;
+                transition: left 0.3s;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            #map {
+                left: 0;
+            }
+
+            .stats-bar {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -438,12 +380,11 @@
     </div>
 
     <div class="header">
-        <h1>Traffic Camera Map</h1>
+        <h1>Traffic Camera Map - TX/KS/OK</h1>
         <div class="header-right">
             <div class="stat">Cameras: <strong id="total-cameras">0</strong></div>
-            <div class="stat">States: <strong id="total-states">0</strong></div>
-            <button class="btn btn-weather">⚠️ Weather Alerts</button>
-            <button class="btn btn-mrms">🌐 MRMS</button>
+            <div class="stat">States: <strong id="total-states">3</strong></div>
+            <div class="stat">With Images: <strong id="cameras-with-urls">0</strong></div>
         </div>
     </div>
 
@@ -459,11 +400,12 @@
             </div>
 
             <div class="filter-section">
-                <div class="filter-label">AUTHORIZATION</div>
-                <div class="toggle-group">
-                    <button class="toggle-btn active" id="auth-authorized">✓ Authorized</button>
-                    <button class="toggle-btn" id="auth-public">✕ Public</button>
-                </div>
+                <div class="filter-label">CAMERA STATUS</div>
+                <select class="filter-select" id="status-filter">
+                    <option value="">All Cameras</option>
+                    <option value="online">With Images</option>
+                    <option value="offline">No Images</option>
+                </select>
             </div>
 
             <div class="camera-list" id="camera-list"></div>
@@ -483,117 +425,77 @@
         let markerClusterGroup;
         let apiKey;
 
-        const ENDPOINTS = {
-            usa: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/refs/heads/master/cameras/USA.json',
-            texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson&resultRecordCount=10000',
-            kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson&resultRecordCount=10000'
-        };
+        const GEOJSON_URL = 'https://raw.githubusercontent.com/anony121221/Test-CAmera-Map/refs/heads/main/combined_northern_TX_KS_OK.geojson';
 
         function updateProgress(percent, text) {
             document.getElementById('progress-bar').style.width = percent + '%';
             document.getElementById('loading-text').textContent = text;
         }
 
-        async function fetchUSACameras() {
+        async function fetchCameras() {
             try {
-                const response = await fetch(ENDPOINTS.usa);
-                const data = await response.json();
-                const cameras = [];
+                updateProgress(20, 'Fetching camera data from GitHub...');
+                const response = await fetch(GEOJSON_URL);
+                const geojsonData = await response.json();
 
-                Object.keys(data).forEach(state => {
-                    const counties = data[state];
-                    Object.keys(counties).forEach(county => {
-                        const cams = counties[county];
-                        cams.forEach(cam => {
-                            if (cam.latitude && cam.longitude) {
-                                cameras.push({
-                                    name: cam.description || 'Unknown Camera',
-                                    camera_url: cam.url,
-                                    description: cam.description,
-                                    state: state,
-                                    county: county,
-                                    latitude: cam.latitude,
-                                    longitude: cam.longitude,
-                                    direction: cam.direction || 'N/A'
-                                });
-                            }
-                        });
+                updateProgress(50, 'Processing camera data...');
+
+                const cameras = [];
+                let camerasWithUrls = 0;
+
+                (geojsonData.features || []).forEach(feature => {
+                    const props = feature.properties;
+                    const raw = props._raw || {};
+
+                    const name = raw.Equipment_Name || raw.DisplayId || raw.camera_id || props.name || 'Unknown Camera';
+                    const state = raw.state || 'Unknown';
+                    const county = raw.county || '';
+                    const city = raw.city || '';
+                    const roadway = raw.roadway || '';
+                    const direction = raw.Direction || raw.direction || '';
+
+                    const cameraUrl = props.camera_url || raw.url || '';
+
+                    if (cameraUrl) {
+                        camerasWithUrls++;
+                    }
+
+                    const location = [city, county].filter(Boolean).join(', ') || roadway;
+
+                    cameras.push({
+                        name: name,
+                        camera_url: cameraUrl,
+                        description: location,
+                        state: state,
+                        county: county,
+                        city: city,
+                        roadway: roadway,
+                        latitude: feature.geometry.coordinates[1],
+                        longitude: feature.geometry.coordinates[0],
+                        direction: direction,
+                        provider: props.provider || 'unknown'
                     });
                 });
 
-                return cameras;
+                updateProgress(80, `Processed ${cameras.length} cameras`);
+
+                return {
+                    cameras: cameras,
+                    camerasWithUrls: camerasWithUrls
+                };
             } catch (error) {
-                console.error('Error fetching USA cameras:', error);
-                return [];
-            }
-        }
-
-        async function fetchTexasCameras() {
-            try {
-                const response = await fetch(ENDPOINTS.texas);
-                const data = await response.json();
-                return (data.features || []).map(f => {
-                    const props = f.properties;
-                    const name = props.Equipment_Name || props.camera_id || 'Unknown Camera';
-                    const location = props.city || props.county || '';
-
-                    return {
-                        name: name,
-                        camera_url: props.url || '',
-                        description: location,
-                        state: 'Texas',
-                        county: props.county || '',
-                        latitude: f.geometry.coordinates[1],
-                        longitude: f.geometry.coordinates[0],
-                        direction: props.Direction || ''
-                    };
-                });
-            } catch (error) {
-                console.error('Error fetching Texas cameras:', error);
-                return [];
-            }
-        }
-
-        async function fetchKansasCameras() {
-            try {
-                const response = await fetch(ENDPOINTS.kansas);
-                const data = await response.json();
-                return (data.features || []).map(f => {
-                    const props = f.properties;
-                    const name = props.DisplayId || 'Unknown Camera';
-                    const imageUrl = props.Attribute7 || '';
-
-                    return {
-                        name: name,
-                        camera_url: imageUrl,
-                        description: name,
-                        state: 'Kansas',
-                        county: '',
-                        latitude: f.geometry.coordinates[1],
-                        longitude: f.geometry.coordinates[0],
-                        direction: ''
-                    };
-                });
-            } catch (error) {
-                console.error('Error fetching Kansas cameras:', error);
-                return [];
+                console.error('Error fetching cameras:', error);
+                alert('Error loading camera data: ' + error.message);
+                return { cameras: [], camerasWithUrls: 0 };
             }
         }
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
-            updateProgress(10, 'Fetching USA cameras...');
+            updateProgress(10, 'Initializing...');
 
-            const usaCameras = await fetchUSACameras();
-            updateProgress(40, `Loaded ${usaCameras.length} USA cameras`);
-
-            const texasCameras = await fetchTexasCameras();
-            updateProgress(70, `Loaded ${texasCameras.length} Texas cameras`);
-
-            const kansasCameras = await fetchKansasCameras();
-            updateProgress(95, `Loaded ${kansasCameras.length} Kansas cameras`);
-
-            allCameras = [...usaCameras, ...texasCameras, ...kansasCameras];
+            const result = await fetchCameras();
+            allCameras = result.cameras;
             filteredCameras = [...allCameras];
 
             const uniqueStates = new Set(allCameras.map(c => c.state));
@@ -601,7 +503,7 @@
             updateProgress(100, `Total: ${allCameras.length} cameras loaded`);
 
             document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
-            document.getElementById('total-states').textContent = uniqueStates.size;
+            document.getElementById('cameras-with-urls').textContent = result.camerasWithUrls.toLocaleString();
             document.getElementById('total-count').textContent = allCameras.length.toLocaleString();
             document.getElementById('showing-count').textContent = allCameras.length.toLocaleString();
 
@@ -618,13 +520,14 @@
             }, 500);
         }
 
-        function createMarkerIcon() {
+        function createMarkerIcon(hasCamera) {
+            const color = hasCamera ? '#10b981' : '#666';
             return L.divIcon({
                 className: 'custom-marker',
                 html: `<div style="
                     width: 8px;
                     height: 8px;
-                    background: #3b82f6;
+                    background: ${color};
                     border: 2px solid white;
                     border-radius: 50%;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
@@ -634,6 +537,10 @@
             });
         }
 
+        function isVideoUrl(url) {
+            return url && (url.includes('.m3u8') || url.includes('stream') || url.includes('video'));
+        }
+
         function createPopupContent(cam) {
             let content = `
                 <div class="popup-content">
@@ -641,25 +548,42 @@
                     <p><strong>State:</strong> ${cam.state}</p>
             `;
 
-            if (cam.county) {
-                content += `<p><strong>County:</strong> ${cam.county}</p>`;
+            if (cam.roadway) {
+                content += `<p><strong>Roadway:</strong> ${cam.roadway}</p>`;
             }
 
-            if (cam.description) {
-                content += `<p><strong>Location:</strong> ${cam.description}</p>`;
+            if (cam.city) {
+                content += `<p><strong>City:</strong> ${cam.city}</p>`;
+            }
+
+            if (cam.county) {
+                content += `<p><strong>County:</strong> ${cam.county}</p>`;
             }
 
             if (cam.direction) {
                 content += `<p><strong>Direction:</strong> ${cam.direction}</p>`;
             }
 
+            content += `<p><strong>Coordinates:</strong> ${cam.latitude.toFixed(6)}, ${cam.longitude.toFixed(6)}</p>`;
+
             if (cam.camera_url) {
-                content += `
-                    <img src="${cam.camera_url}" alt="Camera view" loading="lazy" onerror="this.style.display='none'">
-                    <a href="${cam.camera_url}" target="_blank">📹 View Image</a>
-                `;
+                if (isVideoUrl(cam.camera_url)) {
+                    content += `
+                        <video controls autoplay muted loop>
+                            <source src="${cam.camera_url}" type="application/x-mpegURL">
+                            Your browser does not support the video tag.
+                        </video>
+                    `;
+                } else {
+                    content += `
+                        <img src="${cam.camera_url}" alt="Camera view" loading="lazy"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <p style="color: #999; display: none;">Image failed to load</p>
+                    `;
+                }
+                content += `<a href="${cam.camera_url}" target="_blank">📹 View Full Size</a>`;
             } else {
-                content += `<p style="color: #999;">No image available</p>`;
+                content += `<p style="color: #999;">No camera image available</p>`;
             }
 
             content += `</div>`;
@@ -673,20 +597,23 @@
 
             markerClusterGroup = L.markerClusterGroup({
                 chunkedLoading: true,
-                chunkInterval: 100,
-                chunkDelay: 25,
+                chunkInterval: 200,
+                chunkDelay: 50,
                 maxClusterRadius: 50,
-                disableClusteringAtZoom: 15
+                disableClusteringAtZoom: 15,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: false
             });
 
             filteredCameras.forEach(cam => {
                 const marker = L.marker([cam.latitude, cam.longitude], {
-                    icon: createMarkerIcon()
+                    icon: createMarkerIcon(!!cam.camera_url)
                 });
 
                 marker.on('click', function() {
                     this.bindPopup(createPopupContent(cam), {
-                        maxWidth: 300
+                        maxWidth: 320,
+                        minWidth: 280
                     }).openPopup();
                 });
 
@@ -701,28 +628,37 @@
             const listContainer = document.getElementById('camera-list');
             listContainer.innerHTML = '';
 
-            const displayCameras = filteredCameras.slice(0, 50);
+            const displayCameras = filteredCameras.slice(0, 100);
             const fragment = document.createDocumentFragment();
 
             displayCameras.forEach(cam => {
                 const item = document.createElement('div');
-                item.className = 'camera-item online';
+                item.className = cam.camera_url ? 'camera-item online' : 'camera-item offline';
                 item.innerHTML = `
                     <div class="camera-name">${cam.name}</div>
-                    <div class="camera-location">${cam.state}${cam.county ? ', ' + cam.county : ''}${cam.direction ? ' • ' + cam.direction : ''}</div>
+                    <div class="camera-location">${cam.state}${cam.description ? ' • ' + cam.description : ''}${cam.direction ? ' • ' + cam.direction : ''}</div>
                 `;
                 item.onclick = () => {
-                    map.setView([cam.latitude, cam.longitude], 15);
+                    map.setView([cam.latitude, cam.longitude], 16);
+                    setTimeout(() => {
+                        markerClusterGroup.eachLayer(marker => {
+                            const markerLatLng = marker.getLatLng();
+                            if (Math.abs(markerLatLng.lat - cam.latitude) < 0.0001 &&
+                                Math.abs(markerLatLng.lng - cam.longitude) < 0.0001) {
+                                marker.fire('click');
+                            }
+                        });
+                    }, 300);
                 };
                 fragment.appendChild(item);
             });
 
             listContainer.appendChild(fragment);
 
-            if (filteredCameras.length > 50) {
+            if (filteredCameras.length > 100) {
                 const more = document.createElement('div');
                 more.style.cssText = 'padding: 12px; text-align: center; color: #999; font-size: 13px;';
-                more.textContent = `+ ${filteredCameras.length - 50} more`;
+                more.textContent = `+ ${filteredCameras.length - 100} more cameras`;
                 listContainer.appendChild(more);
             }
         }
@@ -732,7 +668,34 @@
             clearTimeout(filterTimeout);
             filterTimeout = setTimeout(() => {
                 addCamerasToMap();
-            }, 200);
+                document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
+            }, 300);
+        }
+
+        function applyFilters() {
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            const stateFilter = document.getElementById('state-filter').value;
+            const statusFilter = document.getElementById('status-filter').value;
+
+            filteredCameras = allCameras.filter(cam => {
+                const matchesSearch = !searchQuery ||
+                    cam.name.toLowerCase().includes(searchQuery) ||
+                    cam.state.toLowerCase().includes(searchQuery) ||
+                    (cam.description && cam.description.toLowerCase().includes(searchQuery)) ||
+                    (cam.county && cam.county.toLowerCase().includes(searchQuery)) ||
+                    (cam.city && cam.city.toLowerCase().includes(searchQuery)) ||
+                    (cam.roadway && cam.roadway.toLowerCase().includes(searchQuery));
+
+                const matchesState = !stateFilter || cam.state === stateFilter;
+
+                const matchesStatus = !statusFilter ||
+                    (statusFilter === 'online' && cam.camera_url) ||
+                    (statusFilter === 'offline' && !cam.camera_url);
+
+                return matchesSearch && matchesState && matchesStatus;
+            });
+
+            applyFiltersDebounced();
         }
 
         async function initMap() {
@@ -751,12 +714,15 @@
                 await new Promise(resolve => setTimeout(resolve, 100));
 
                 map = L.map('map', {
-                    preferCanvas: true
-                }).setView([37.0902, -95.7129], 5);
+                    preferCanvas: true,
+                    zoomControl: true
+                }).setView([32.7767, -96.7970], 7);
 
                 L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
                     attribution: '© MapTiler © OpenStreetMap contributors',
-                    maxZoom: 20
+                    maxZoom: 20,
+                    tileSize: 512,
+                    zoomOffset: -1
                 }).addTo(map);
 
                 await loadAllCameras();
@@ -769,28 +735,9 @@
             }
         }
 
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            filteredCameras = allCameras.filter(cam =>
-                cam.name.toLowerCase().includes(query) ||
-                cam.state.toLowerCase().includes(query) ||
-                (cam.description && cam.description.toLowerCase().includes(query)) ||
-                (cam.county && cam.county.toLowerCase().includes(query))
-            );
-            document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
-            applyFiltersDebounced();
-        });
-
-        document.getElementById('state-filter').addEventListener('change', (e) => {
-            const state = e.target.value;
-            if (state) {
-                filteredCameras = allCameras.filter(cam => cam.state === state);
-            } else {
-                filteredCameras = [...allCameras];
-            }
-            document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
-            applyFiltersDebounced();
-        });
+        document.getElementById('search-input').addEventListener('input', applyFilters);
+        document.getElementById('state-filter').addEventListener('change', applyFilters);
+        document.getElementById('status-filter').addEventListener('change', applyFilters);
 
         window.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
