@@ -3,114 +3,411 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USA Traffic Cameras Weather Map</title>
+    <title>Traffic Camera Map</title>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.umd.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v2.0.3/maptiler-sdk.css" rel="stylesheet" />
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            box-sizing: border-box;
         }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #000;
+            color: #fff;
+        }
+        
         #map {
             position: absolute;
-            top: 0;
+            top: 60px;
             bottom: 0;
             width: 100%;
         }
-        .info-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            max-width: 300px;
+        
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1001;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .stat {
+            font-size: 13px;
+            color: #999;
+        }
+        
+        .stat strong {
+            color: #fff;
+            margin-left: 5px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .btn-weather {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-mrms {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            width: 380px;
+            bottom: 0;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            overflow-y: auto;
             z-index: 1000;
         }
-        .info-panel h3 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
+        
+        .sidebar-content {
+            padding: 20px;
         }
-        .info-panel p {
-            margin: 5px 0;
-            font-size: 13px;
+        
+        .search-box {
+            width: 100%;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 20px;
         }
-        .api-key-input {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            z-index: 2000;
-            text-align: center;
+        
+        .search-box::placeholder {
+            color: #666;
         }
-        .api-key-input input {
+        
+        .filter-section {
+            margin-bottom: 20px;
+        }
+        
+        .filter-label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .filter-select {
             width: 100%;
             padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            color: #fff;
             font-size: 14px;
         }
-        .api-key-input button {
-            background: #4CAF50;
+        
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .toggle-btn {
+            flex: 1;
+            padding: 10px;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            color: #999;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .toggle-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        
+        .camera-list {
+            margin-top: 20px;
+        }
+        
+        .camera-item {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .camera-item:hover {
+            background: #333;
+            border-color: #444;
+        }
+        
+        .camera-item.online::before {
+            content: '●';
+            color: #10b981;
+            margin-right: 8px;
+        }
+        
+        .camera-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .camera-location {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .stats-bar {
+            padding: 12px 20px;
+            background: #2a2a2a;
+            border-top: 1px solid #3a3a3a;
+            font-size: 13px;
+            color: #999;
+        }
+        
+        .stats-bar span {
+            color: #3b82f6;
+        }
+        
+        /* Map controls */
+        .maplibregl-ctrl-bottom-right {
+            bottom: 10px !important;
+            right: 10px !important;
+        }
+        
+        /* Popup styling */
+        .maplibregl-popup-content {
+            background: #1a1a1a !important;
+            color: #fff !important;
+            border: 1px solid #333 !important;
+            border-radius: 8px !important;
+            padding: 15px !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+        }
+        
+        .maplibregl-popup-close-button {
+            color: #fff !important;
+            font-size: 20px !important;
+        }
+        
+        .popup-content h4 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        
+        .popup-content p {
+            margin: 6px 0;
+            font-size: 13px;
+            color: #ccc;
+        }
+        
+        .popup-content strong {
+            color: #fff;
+        }
+        
+        .stream-btn {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #3b82f6;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .stream-btn:hover {
+            background: #2563eb;
+        }
+        
+        .api-key-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        
+        .modal-content {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 10px;
+            font-size: 22px;
+        }
+        
+        .modal-content p {
+            color: #999;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        
+        .modal-content button {
+            width: 100%;
+            padding: 12px;
+            background: #3b82f6;
             color: white;
             border: none;
-            padding: 10px 30px;
-            border-radius: 4px;
-            cursor: pointer;
+            border-radius: 6px;
             font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
         }
-        .api-key-input button:hover {
-            background: #45a049;
+        
+        .modal-content button:hover {
+            background: #2563eb;
         }
+        
         .hidden {
             display: none;
         }
-        .popup-content {
-            font-size: 12px;
+        
+        /* Scrollbar */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
         }
-        .popup-content h4 {
-            margin: 0 0 8px 0;
-            font-size: 14px;
+        
+        .sidebar::-webkit-scrollbar-track {
+            background: #1a1a1a;
         }
-        .popup-content a {
-            color: #2196F3;
-            text-decoration: none;
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #3a3a3a;
+            border-radius: 4px;
         }
-        .popup-content a:hover {
-            text-decoration: underline;
+        
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #4a4a4a;
         }
     </style>
 </head>
 <body>
-    <div id="api-key-panel" class="api-key-input">
-        <h2>Enter MapTiler API Key</h2>
-        <p style="color: #666; margin-bottom: 15px;">Get your free API key at <a href="https://www.maptiler.com/" target="_blank">maptiler.com</a></p>
-        <input type="text" id="api-key" placeholder="Enter your MapTiler API key">
-        <br>
-        <button onclick="initMap()">Load Map</button>
+    <div id="api-key-modal" class="api-key-modal">
+        <div class="modal-content">
+            <h2>Enter MapTiler API Key</h2>
+            <p>Get your free API key at <a href="https://www.maptiler.com/" target="_blank" style="color: #3b82f6;">maptiler.com</a></p>
+            <input type="text" id="api-key" placeholder="Enter your MapTiler API key">
+            <button onclick="initMap()">Load Map</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>Traffic Camera Map</h1>
+        <div class="header-right">
+            <div class="stat">Cameras: <strong id="total-cameras">0</strong></div>
+            <div class="stat">States: <strong id="total-states">0</strong></div>
+            <button class="btn btn-weather">⚠️ Weather Alerts</button>
+            <button class="btn btn-mrms">🌐 MRMS</button>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-content">
+            <input type="text" class="search-box" placeholder="Search cameras..." id="search-input">
+            
+            <div class="filter-section">
+                <div class="filter-label">STATE</div>
+                <select class="filter-select" id="state-filter">
+                    <option value="">All States</option>
+                </select>
+            </div>
+            
+            <div class="filter-section">
+                <div class="filter-label">AUTHORIZATION</div>
+                <div class="toggle-group">
+                    <button class="toggle-btn active" id="auth-authorized">✓ Authorized</button>
+                    <button class="toggle-btn" id="auth-public">✕ Public</button>
+                </div>
+            </div>
+            
+            <div class="filter-section">
+                <div class="filter-label">PROVIDER</div>
+                <select class="filter-select" id="provider-filter">
+                    <option value="">All Providers</option>
+                </select>
+            </div>
+            
+            <div class="camera-list" id="camera-list"></div>
+        </div>
+        
+        <div class="stats-bar">
+            Showing: <span id="showing-count">0</span> Total: <span id="total-count">0</span>
+        </div>
     </div>
 
     <div id="map"></div>
-    
-    <div class="info-panel hidden" id="info-panel">
-        <h3>🚦 Traffic Cameras Map</h3>
-        <p><strong>Total Cameras:</strong> <span id="total-cameras">0</span></p>
-        <p><strong>States:</strong> <span id="total-states">0</span></p>
-        <p style="font-size: 11px; color: #666; margin-top: 10px;">Click any camera marker to view details and stream</p>
-    </div>
 
     <script>
-        const cameraData = {"Alabama":{"Mobile":[{"description":"I-10 McDonald Rd","latitude":30.53555,"longitude":-88.23918,"direction":"E","url":"https://cdn3.wowza.com/5/eEFlQ3ltMitMdTdk/mobile-fastly/mob-cam-c095.stream/playlist.m3u8","encoding":"H.264","format":"M3U8"},{"description":"I-10 I-10 MP 11.7 EB","latitude":30.54462,"longitude":-88.22445,"direction":"E","url":"https://cdn3.wowza.com/5/eEFlQ3ltMitMdTdk/mobile-fastly/mob-cam-c094.stream/playlist.m3u8","encoding":"H.264","format":"M3U8"}]}};
-
         let map;
-        let markers = [];
+        let allCameras = [];
+        let filteredCameras = [];
+        let states = new Set();
 
         async function fetchFullCameraData() {
             try {
@@ -118,7 +415,8 @@
                 return await response.json();
             } catch (error) {
                 console.error('Error fetching camera data:', error);
-                return cameraData;
+                alert('Error loading camera data. Please refresh the page.');
+                return {};
             }
         }
 
@@ -130,83 +428,231 @@
                 return;
             }
 
-            document.getElementById('api-key-panel').classList.add('hidden');
-            document.getElementById('info-panel').classList.remove('hidden');
-
-            const {MapStyle} = maptilersdk;
+            document.getElementById('api-key-modal').classList.add('hidden');
+            
             maptilersdk.config.apiKey = apiKey;
             
-            const fullCameraData = await fetchFullCameraData();
-
             map = new maptilersdk.Map({
                 container: 'map',
-                style: MapStyle.HYBRID,
+                style: 'https://api.maptiler.com/maps/streets-v2-dark/style.json?key=' + apiKey,
                 center: [-98.5795, 39.8283],
-                zoom: 4,
-                weatherApiKey: apiKey
+                zoom: 4
             });
 
-            map.on('load', () => {
-                addCamerasToMap(fullCameraData);
+            map.on('load', async () => {
+                const fullCameraData = await fetchFullCameraData();
+                processCameraData(fullCameraData);
+                addCamerasToMap();
+                populateFilters();
+                updateCameraList();
             });
         }
 
-        function addCamerasToMap(data) {
-            let totalCameras = 0;
-            const states = Object.keys(data);
-            
-            states.forEach(state => {
+        function processCameraData(data) {
+            Object.keys(data).forEach(state => {
+                states.add(state);
                 const counties = data[state];
                 Object.keys(counties).forEach(county => {
                     const cameras = counties[county];
                     cameras.forEach(camera => {
                         if (camera.latitude && camera.longitude) {
-                            addCameraMarker(camera, state, county);
-                            totalCameras++;
+                            allCameras.push({
+                                description: camera.description,
+                                state: state,
+                                county: county,
+                                latitude: camera.latitude,
+                                longitude: camera.longitude,
+                                direction: camera.direction || 'N/A',
+                                format: camera.format,
+                                encoding: camera.encoding,
+                                url: camera.url
+                            });
                         }
                     });
                 });
             });
 
-            document.getElementById('total-cameras').textContent = totalCameras;
-            document.getElementById('total-states').textContent = states.length;
+            filteredCameras = [...allCameras];
+            document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
+            document.getElementById('total-states').textContent = states.size;
+            document.getElementById('total-count').textContent = allCameras.length.toLocaleString();
+            document.getElementById('showing-count').textContent = allCameras.length.toLocaleString();
         }
 
-        function addCameraMarker(camera, state, county) {
-            const el = document.createElement('div');
-            el.className = 'marker';
-            el.style.width = '10px';
-            el.style.height = '10px';
-            el.style.borderRadius = '50%';
-            el.style.backgroundColor = '#FF4444';
-            el.style.border = '2px solid white';
-            el.style.cursor = 'pointer';
-            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+        function addCamerasToMap() {
+            const features = filteredCameras.map(cam => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [cam.longitude, cam.latitude]
+                },
+                properties: cam
+            }));
 
-            const popupContent = `
-                <div class="popup-content">
-                    <h4>${camera.description}</h4>
-                    <p><strong>Location:</strong> ${county}, ${state}</p>
-                    <p><strong>Direction:</strong> ${camera.direction || 'N/A'}</p>
-                    <p><strong>Format:</strong> ${camera.format} (${camera.encoding})</p>
-                    <p><a href="${camera.url}" target="_blank">📹 View Stream</a></p>
-                </div>
-            `;
+            if (map.getSource('cameras')) {
+                map.getSource('cameras').setData({
+                    type: 'FeatureCollection',
+                    features: features
+                });
+                return;
+            }
 
-            const popup = new maptilersdk.Popup({ 
-                offset: 15,
-                maxWidth: '300px'
-            }).setHTML(popupContent);
+            map.addSource('cameras', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                },
+                cluster: true,
+                clusterMaxZoom: 12,
+                clusterRadius: 50
+            });
 
-            const marker = new maptilersdk.Marker({ element: el })
-                .setLngLat([camera.longitude, camera.latitude])
-                .setPopup(popup)
-                .addTo(map);
+            // Clusters
+            map.addLayer({
+                id: 'clusters',
+                type: 'circle',
+                source: 'cameras',
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': '#3b82f6',
+                    'circle-radius': [
+                        'step',
+                        ['get', 'point_count'],
+                        15, 10,
+                        20, 30,
+                        25, 100,
+                        30
+                    ],
+                    'circle-opacity': 0.8,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#fff'
+                }
+            });
 
-            markers.push(marker);
+            map.addLayer({
+                id: 'cluster-count',
+                type: 'symbol',
+                source: 'cameras',
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': '{point_count_abbreviated}',
+                    'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+                    'text-size': 12
+                },
+                paint: {
+                    'text-color': '#ffffff'
+                }
+            });
+
+            // Individual points
+            map.addLayer({
+                id: 'unclustered-point',
+                type: 'circle',
+                source: 'cameras',
+                filter: ['!', ['has', 'point_count']],
+                paint: {
+                    'circle-color': '#3b82f6',
+                    'circle-radius': 6,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#fff',
+                    'circle-opacity': 0.9
+                }
+            });
+
+            // Click handlers
+            map.on('click', 'clusters', (e) => {
+                const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+                const clusterId = features[0].properties.cluster_id;
+                map.getSource('cameras').getClusterExpansionZoom(clusterId, (err, zoom) => {
+                    if (err) return;
+                    map.easeTo({
+                        center: features[0].geometry.coordinates,
+                        zoom: zoom
+                    });
+                });
+            });
+
+            map.on('click', 'unclustered-point', (e) => {
+                const props = e.features[0].properties;
+                const popupContent = `
+                    <div class="popup-content">
+                        <h4>${props.description}</h4>
+                        <p><strong>Location:</strong> ${props.county}, ${props.state}</p>
+                        <p><strong>Direction:</strong> ${props.direction}</p>
+                        <p><strong>Format:</strong> ${props.format}</p>
+                        <a href="${props.url}" target="_blank" class="stream-btn">📹 Open Stream</a>
+                    </div>
+                `;
+                new maptilersdk.Popup()
+                    .setLngLat(e.features[0].geometry.coordinates)
+                    .setHTML(popupContent)
+                    .addTo(map);
+            });
+
+            map.on('mouseenter', 'clusters', () => map.getCanvas().style.cursor = 'pointer');
+            map.on('mouseleave', 'clusters', () => map.getCanvas().style.cursor = '');
+            map.on('mouseenter', 'unclustered-point', () => map.getCanvas().style.cursor = 'pointer');
+            map.on('mouseleave', 'unclustered-point', () => map.getCanvas().style.cursor = '');
         }
 
-        // Check if API key is in URL hash (for quick testing)
+        function populateFilters() {
+            const stateFilter = document.getElementById('state-filter');
+            Array.from(states).sort().forEach(state => {
+                const option = document.createElement('option');
+                option.value = state;
+                option.textContent = state;
+                stateFilter.appendChild(option);
+            });
+        }
+
+        function updateCameraList() {
+            const listContainer = document.getElementById('camera-list');
+            listContainer.innerHTML = '';
+            
+            const displayCameras = filteredCameras.slice(0, 50);
+            displayCameras.forEach(cam => {
+                const item = document.createElement('div');
+                item.className = 'camera-item online';
+                item.innerHTML = `
+                    <div class="camera-name">${cam.description}</div>
+                    <div class="camera-location">${cam.state}, ${cam.county} • ${cam.direction}</div>
+                `;
+                item.onclick = () => {
+                    map.flyTo({ center: [cam.longitude, cam.latitude], zoom: 15 });
+                };
+                listContainer.appendChild(item);
+            });
+        }
+
+        // Search functionality
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            filteredCameras = allCameras.filter(cam => 
+                cam.description.toLowerCase().includes(query) ||
+                cam.state.toLowerCase().includes(query) ||
+                cam.county.toLowerCase().includes(query)
+            );
+            document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
+            updateCameraList();
+            addCamerasToMap();
+        });
+
+        // State filter
+        document.getElementById('state-filter').addEventListener('change', (e) => {
+            const state = e.target.value;
+            if (state) {
+                filteredCameras = allCameras.filter(cam => cam.state === state);
+                map.flyTo({ center: [-98.5795, 39.8283], zoom: 5 });
+            } else {
+                filteredCameras = [...allCameras];
+            }
+            document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
+            updateCameraList();
+            addCamerasToMap();
+        });
+
+        // Check URL for API key
         window.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const apiKeyFromUrl = urlParams.get('key');
