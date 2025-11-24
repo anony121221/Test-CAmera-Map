@@ -380,11 +380,11 @@
     </div>
 
     <div class="header">
-        <h1>Traffic Camera Map - TX/KS/OK</h1>
+        <h1>Traffic Camera Map</h1>
         <div class="header-right">
             <div class="stat">Cameras: <strong id="total-cameras">0</strong></div>
-            <div class="stat">States: <strong id="total-states">3</strong></div>
-            <div class="stat">With Images: <strong id="cameras-with-urls">0</strong></div>
+            <div class="stat">States: <strong id="total-states">0</strong></div>
+            <div class="stat">With Streams: <strong id="cameras-with-urls">0</strong></div>
         </div>
     </div>
 
@@ -426,22 +426,58 @@
         let apiKey;
 
         const GEOJSON_URL = 'https://raw.githubusercontent.com/anony121221/Test-CAmera-Map/refs/heads/main/combined_northern_TX_KS_OK.geojson';
+        const USA_URL = 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/refs/heads/master/cameras/USA.json';
 
         function updateProgress(percent, text) {
             document.getElementById('progress-bar').style.width = percent + '%';
             document.getElementById('loading-text').textContent = text;
         }
 
-        async function fetchCameras() {
+        async function fetchUSACameras() {
             try {
-                updateProgress(20, 'Fetching camera data from GitHub...');
+                updateProgress(10, 'Fetching USA camera database...');
+                const response = await fetch(USA_URL);
+                const data = await response.json();
+                const cameras = [];
+                let count = 0;
+
+                Object.keys(data).forEach(state => {
+                    const counties = data[state];
+                    Object.keys(counties).forEach(county => {
+                        const cams = counties[county];
+                        cams.forEach(cam => {
+                            if (cam.latitude && cam.longitude && cam.url) {
+                                cameras.push({
+                                    name: cam.description || 'Unknown Camera',
+                                    camera_url: cam.url,
+                                    description: cam.description,
+                                    state: state,
+                                    county: county,
+                                    latitude: cam.latitude,
+                                    longitude: cam.longitude,
+                                    direction: cam.direction || '',
+                                    provider: 'usa-traffic',
+                                    format: cam.format || 'M3U8'
+                                });
+                                count++;
+                            }
+                        });
+                    });
+                });
+
+                return cameras;
+            } catch (error) {
+                console.error('Error fetching USA cameras:', error);
+                return [];
+            }
+        }
+
+        async function fetchGeoJSONData() {
+            try {
+                updateProgress(30, 'Fetching TX/KS/OK camera data...');
                 const response = await fetch(GEOJSON_URL);
                 const geojsonData = await response.json();
-
-                updateProgress(50, 'Processing camera data...');
-
                 const cameras = [];
-                let camerasWithUrls = 0;
 
                 (geojsonData.features || []).forEach(feature => {
                     const props = feature.properties;
@@ -457,53 +493,52 @@
                     const cameraUrl = props.camera_url || raw.url || '';
 
                     if (cameraUrl) {
-                        camerasWithUrls++;
+                        const location = [city, county].filter(Boolean).join(', ') || roadway;
+
+                        cameras.push({
+                            name: name,
+                            camera_url: cameraUrl,
+                            description: location,
+                            state: state,
+                            county: county,
+                            city: city,
+                            roadway: roadway,
+                            latitude: feature.geometry.coordinates[1],
+                            longitude: feature.geometry.coordinates[0],
+                            direction: direction,
+                            provider: props.provider || 'regional'
+                        });
                     }
-
-                    const location = [city, county].filter(Boolean).join(', ') || roadway;
-
-                    cameras.push({
-                        name: name,
-                        camera_url: cameraUrl,
-                        description: location,
-                        state: state,
-                        county: county,
-                        city: city,
-                        roadway: roadway,
-                        latitude: feature.geometry.coordinates[1],
-                        longitude: feature.geometry.coordinates[0],
-                        direction: direction,
-                        provider: props.provider || 'unknown'
-                    });
                 });
 
-                updateProgress(80, `Processed ${cameras.length} cameras`);
-
-                return {
-                    cameras: cameras,
-                    camerasWithUrls: camerasWithUrls
-                };
+                return cameras;
             } catch (error) {
-                console.error('Error fetching cameras:', error);
-                alert('Error loading camera data: ' + error.message);
-                return { cameras: [], camerasWithUrls: 0 };
+                console.error('Error fetching GeoJSON cameras:', error);
+                return [];
             }
         }
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
-            updateProgress(10, 'Initializing...');
+            updateProgress(5, 'Initializing...');
 
-            const result = await fetchCameras();
-            allCameras = result.cameras;
+            const usaCameras = await fetchUSACameras();
+            updateProgress(50, `Loaded ${usaCameras.length} USA cameras`);
+
+            const geoJsonCameras = await fetchGeoJSONData();
+            updateProgress(75, `Loaded ${geoJsonCameras.length} regional cameras`);
+
+            allCameras = [...usaCameras, ...geoJsonCameras];
             filteredCameras = [...allCameras];
 
             const uniqueStates = new Set(allCameras.map(c => c.state));
+            const camerasWithUrls = allCameras.filter(c => c.camera_url).length;
 
             updateProgress(100, `Total: ${allCameras.length} cameras loaded`);
 
             document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
-            document.getElementById('cameras-with-urls').textContent = result.camerasWithUrls.toLocaleString();
+            document.getElementById('total-states').textContent = uniqueStates.size;
+            document.getElementById('cameras-with-urls').textContent = camerasWithUrls.toLocaleString();
             document.getElementById('total-count').textContent = allCameras.length.toLocaleString();
             document.getElementById('showing-count').textContent = allCameras.length.toLocaleString();
 
@@ -537,8 +572,8 @@
             });
         }
 
-        function isVideoUrl(url) {
-            return url && (url.includes('.m3u8') || url.includes('stream') || url.includes('video'));
+        function isM3U8Url(url) {
+            return url && (url.includes('.m3u8') || url.includes('playlist'));
         }
 
         function createPopupContent(cam) {
@@ -567,23 +602,24 @@
             content += `<p><strong>Coordinates:</strong> ${cam.latitude.toFixed(6)}, ${cam.longitude.toFixed(6)}</p>`;
 
             if (cam.camera_url) {
-                if (isVideoUrl(cam.camera_url)) {
+                if (isM3U8Url(cam.camera_url)) {
                     content += `
-                        <video controls autoplay muted loop>
+                        <video controls autoplay muted style="width: 100%; max-width: 320px; border-radius: 4px; margin: 10px 0;">
                             <source src="${cam.camera_url}" type="application/x-mpegURL">
-                            Your browser does not support the video tag.
+                            <p>Your browser does not support HLS video playback.</p>
                         </video>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Live stream (M3U8)</p>
                     `;
                 } else {
                     content += `
-                        <img src="${cam.camera_url}" alt="Camera view" loading="lazy"
+                        <img src="${cam.camera_url}" alt="Camera view" loading="lazy" style="width: 100%; max-width: 320px; border-radius: 4px; margin: 10px 0;"
                              onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        <p style="color: #999; display: none;">Image failed to load</p>
+                        <p style="color: #999; display: none; font-size: 12px;">Image failed to load</p>
                     `;
                 }
-                content += `<a href="${cam.camera_url}" target="_blank">📹 View Full Size</a>`;
+                content += `<a href="${cam.camera_url}" target="_blank" style="display: block; margin-top: 8px;">📹 View Full Size</a>`;
             } else {
-                content += `<p style="color: #999;">No camera image available</p>`;
+                content += `<p style="color: #999;">No camera stream available</p>`;
             }
 
             content += `</div>`;
