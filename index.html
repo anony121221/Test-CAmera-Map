@@ -673,8 +673,17 @@
                     return;
                 }
 
+                // Save API key to localStorage
+                localStorage.setItem('maptiler_api_key', apiKey);
+
                 console.log('Starting map initialization...');
-                document.getElementById('api-key-modal').classList.add('hidden');
+                
+                // Hide modal and show loading IMMEDIATELY
+                document.getElementById('api-key-modal').style.display = 'none';
+                document.getElementById('loading').classList.remove('hidden');
+
+                // Small delay to ensure UI updates
+                await new Promise(resolve => setTimeout(resolve, 100));
 
                 // Initialize Leaflet map with MapTiler dark style
                 console.log('Creating map...');
@@ -694,7 +703,7 @@
             } catch (error) {
                 console.error('Error initializing map:', error);
                 alert('Error loading map: ' + error.message);
-                document.getElementById('api-key-modal').classList.remove('hidden');
+                document.getElementById('api-key-modal').style.display = 'flex';
                 document.getElementById('loading').classList.add('hidden');
             }
         }
@@ -724,12 +733,22 @@
             addCamerasToMap();
         });
 
-        // Check URL for API key
+        // Check for saved API key or URL parameter on load
         window.addEventListener('DOMContentLoaded', () => {
+            // Check URL parameter first
             const urlParams = new URLSearchParams(window.location.search);
             const apiKeyFromUrl = urlParams.get('key');
+            
+            // Check localStorage for saved key
+            const savedApiKey = localStorage.getItem('maptiler_api_key');
+            
             if (apiKeyFromUrl) {
                 document.getElementById('api-key').value = apiKeyFromUrl;
+                initMap();
+            } else if (savedApiKey) {
+                // Auto-load with saved API key
+                document.getElementById('api-key').value = savedApiKey;
+                document.getElementById('api-key-modal').style.display = 'none';
                 initMap();
             }
         });
