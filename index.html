@@ -93,11 +93,10 @@
             transition: transform 0.3s;
         }
 
-        /* Mobile responsiveness */
         @media (max-width: 768px) {
             #map {
                 left: 0;
-                top: 110px; /* Account for mobile header height if needed */
+                top: 60px;
             }
             .sidebar {
                 width: 100%;
@@ -106,10 +105,10 @@
                 bottom: 0;
                 border-right: none;
                 border-top: 1px solid #333;
-                display: none; /* Hidden by default on mobile map view */
+                transform: translateY(100%);
             }
             .sidebar.active {
-                display: block;
+                transform: translateY(0);
             }
         }
         
@@ -219,7 +218,6 @@
             display: none !important;
         }
 
-        /* Leaflet Popup Dark Mode Overrides */
         .leaflet-popup-content-wrapper {
             background: #1a1a1a !important;
             color: #fff !important;
@@ -296,7 +294,6 @@
             font-weight: 500;
         }
 
-        /* API Key Modal */
         .api-key-modal {
             position: fixed;
             top: 0;
@@ -339,7 +336,6 @@
             cursor: pointer;
         }
 
-        /* Marker Clusters */
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
             background-color: rgba(59, 130, 246, 0.6);
         }
@@ -402,25 +398,13 @@
         let markersCluster;
 
         const ENDPOINTS = {
-            // The Main USA Feed (GitHub raw - supports CORS naturally)
             usa_main: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/master/cameras/USA.json',
-            
-            // New Additions
-            alabama: 'https://api.algotraffic.com/v4.0/Cameras/Layer?includeGeometry=true',
-            // FIXED: Removed 'refs/heads/' from URL to make it a valid raw GitHub link
             mississippi: 'https://raw.githubusercontent.com/anony121221/maps-data/main/mdot_traffic_cameras.geojson',
-
-            // Specific State Feeds
+            arkansas: 'https://layers.idrivearkansas.com/cameras.geojson',
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
             kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson',
-            northDakota: 'https://travelfiles.dot.nd.gov/geojson_nc/cameras.json',
-            
-            // Feeds often requiring Proxy
-            southDakota: 'https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.cameras.geojson',
-            arkansas: 'https://www.idrivearkansas.com/datasets/cameras.json', 
-            maryland: 'https://chart.maryland.gov/DataFeeds/GetCamerasJson',
-            ohio: 'https://publicapi.ohgo.com/api/v1/cameraimages?apiKey=f0e1bf7e-4578-46eb-a3f1-0a4de770f89d'
+            northDakota: 'https://travelfiles.dot.nd.gov/geojson_nc/cameras.json'
         };
 
         function updateProgress(percent, text) {
@@ -428,46 +412,49 @@
             document.getElementById('loading-text').textContent = text;
         }
 
-        // --- Smart Fetch System ---
-        // Tries direct fetch first. If CORS fails, switches to Proxy.
-        
         async function smartFetch(url) {
-            // 1. Try Direct
+            // Try direct fetch first
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000); 
+                const timeoutId = setTimeout(() => controller.abort(), 10000); 
                 
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(timeoutId);
                 
                 if (response.ok) {
-                    return await response.json();
+                    const text = await response.text();
+                    return JSON.parse(text);
                 }
             } catch (error) {
-                // Ignore error, proceed to proxy
+                console.log(`Direct fetch failed for ${url}, trying proxy...`);
             }
 
-            // 2. Try Primary Proxy (AllOrigins)
-            try {
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                const response = await fetch(proxyUrl);
-                if (response.ok) return await response.json();
-            } catch (error) {
-                // console.warn('Primary proxy failed');
-            }
-
-            // 3. Try Backup Proxy (CorsProxy.io)
+            // Try cors-anywhere style proxy
             try {
                 const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 const response = await fetch(proxyUrl);
-                if (response.ok) return await response.json();
+                if (response.ok) {
+                    const text = await response.text();
+                    return JSON.parse(text);
+                }
+            } catch (error) {
+                console.log(`Proxy 1 failed for ${url}`);
+            }
+
+            // Try allorigins
+            try {
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    const text = await response.text();
+                    return JSON.parse(text);
+                }
             } catch (error) {
                 console.error(`All fetch methods failed for ${url}`);
-                return null;
             }
-        }
 
-        // --- Fetch Wrappers ---
+            return null;
+        }
 
         async function fetchUSAMain() {
             const data = await smartFetch(ENDPOINTS.usa_main);
@@ -494,57 +481,33 @@
             return cameras;
         }
 
-        async function fetchAlabama() {
-            const data = await smartFetch(ENDPOINTS.alabama);
-            if (!Array.isArray(data)) return [];
-            
-            return data.map(cam => {
-                // Alabama typically provides an Id, we construct the image URL from it
-                // Logic based on standard ALGO traffic patterns
-                const camId = cam.Id || cam.id || cam.ID;
-                const name = cam.Name || cam.Description || 'Alabama Camera';
-                
-                // Construct URL if not provided directly
-                let imageUrl = cam.Url || cam.Image || cam.ImageUrl;
-                if (!imageUrl && camId) {
-                    imageUrl = `https://api.algotraffic.com/v2/Camera/Image/${camId}`;
-                }
+        async function fetchArkansas() {
+            const data = await smartFetch(ENDPOINTS.arkansas);
+            if (!data || !data.features) {
+                console.error('Arkansas data not loaded correctly:', data);
+                return [];
+            }
 
-                // Geometry is often nested
-                let lat, lon;
-                if (cam.Geometry && cam.Geometry.Coordinates) {
-                    lon = cam.Geometry.Coordinates[0];
-                    lat = cam.Geometry.Coordinates[1];
-                } else if (cam.Latitude && cam.Longitude) {
-                    lat = cam.Latitude;
-                    lon = cam.Longitude;
-                }
-
-                return {
-                    name: name,
-                    camera_url: imageUrl,
-                    state: 'Alabama',
-                    latitude: lat,
-                    longitude: lon
-                };
-            }).filter(c => c.latitude && c.longitude && c.camera_url);
-        }
-
-        async function fetchMississippi() {
-            const data = await smartFetch(ENDPOINTS.mississippi);
-            if (!data || !data.features) return [];
-
-            return data.features.map(f => {
+            const cameras = data.features.map(f => {
                 const p = f.properties;
-                // MDOT GeoJSON usually has 'url' or 'html_url' or 'img'
+                const coords = f.geometry?.coordinates;
+                
+                if (!coords || coords.length < 2) return null;
+                
+                // Try multiple property names for the image URL
+                const imageUrl = p.url || p.image || p.image_url || p.imageUrl || p.img || p.URL || p.Image;
+                
                 return {
-                    name: p.title || p.name || 'Mississippi Camera',
-                    camera_url: p.url || p.image_url || p.imageUrl || p.img || p.URL, // Added extra check
-                    state: 'Mississippi',
-                    latitude: f.geometry.coordinates[1],
-                    longitude: f.geometry.coordinates[0]
+                    name: p.title || p.name || p.Name || p.location || p.description || 'Arkansas Camera',
+                    camera_url: imageUrl,
+                    state: 'Arkansas',
+                    latitude: coords[1],
+                    longitude: coords[0]
                 };
-            }).filter(c => c.latitude && c.longitude && c.camera_url);
+            }).filter(c => c && c.latitude && c.longitude && c.camera_url);
+            
+            console.log(`Arkansas cameras loaded: ${cameras.length}`);
+            return cameras;
         }
 
         async function fetchGenericGeoJSON(url, stateName, nameProp, imgProp) {
@@ -553,68 +516,19 @@
             
             return data.features.map(f => {
                 const p = f.properties;
+                const coords = f.geometry?.coordinates;
+                
+                if (!coords || coords.length < 2) return null;
+                
                 return {
                     name: p[nameProp] || 'Unknown Camera',
                     camera_url: p[imgProp] || p.imageUrl || p.image_url || p.image || p.url,
                     state: stateName,
-                    latitude: f.geometry.coordinates[1],
-                    longitude: f.geometry.coordinates[0]
+                    latitude: coords[1],
+                    longitude: coords[0]
                 };
-            }).filter(c => c.latitude && c.longitude && c.camera_url);
+            }).filter(c => c && c.latitude && c.longitude && c.camera_url);
         }
-
-        async function fetchArkansas() {
-            const data = await smartFetch(ENDPOINTS.arkansas);
-            const cameras = Array.isArray(data) ? data : (data?.cameras || []);
-            return cameras.map(c => ({
-                name: c.title || c.location || 'Arkansas Camera',
-                camera_url: c.image || c.image_url || c.url, 
-                state: 'Arkansas',
-                latitude: parseFloat(c.latitude),
-                longitude: parseFloat(c.longitude)
-            })).filter(c => c.latitude && c.longitude && c.camera_url);
-        }
-
-        async function fetchSouthDakota() {
-            const data = await smartFetch(ENDPOINTS.southDakota);
-            if (!data || !data.features) return [];
-            return data.features.map(f => {
-                const p = f.properties;
-                return {
-                    name: p.head || p.desc || p.title || 'SD Camera',
-                    camera_url: p.img || p.url || p.image, 
-                    state: 'South Dakota',
-                    latitude: f.geometry.coordinates[1],
-                    longitude: f.geometry.coordinates[0]
-                };
-            }).filter(c => c.latitude && c.longitude && c.camera_url);
-        }
-
-        async function fetchMaryland() {
-            const data = await smartFetch(ENDPOINTS.maryland);
-            if (!Array.isArray(data)) return [];
-            return data.map(c => ({
-                name: c.description || 'MD Camera',
-                camera_url: c.publicVideoURL || c.opRoadImageURL,
-                state: 'Maryland',
-                latitude: c.lat,
-                longitude: c.lon
-            })).filter(c => c.latitude && c.longitude);
-        }
-
-        async function fetchOhio() {
-            const data = await smartFetch(ENDPOINTS.ohio);
-            if (!Array.isArray(data)) return [];
-            return data.map(c => ({
-                name: c.title || 'Ohio Camera',
-                camera_url: c.imageURL,
-                state: 'Ohio',
-                latitude: c.latitude,
-                longitude: c.longitude
-            })).filter(c => c.latitude && c.longitude);
-        }
-
-        // --- Main Load Function ---
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
@@ -622,24 +536,24 @@
 
             const results = await Promise.allSettled([
                 fetchUSAMain(),
-                fetchAlabama(),
                 fetchMississippi(),
+                fetchArkansas(),
                 fetchGenericGeoJSON(ENDPOINTS.texas, 'Texas', 'camera_id', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.oklahoma, 'Oklahoma', 'name', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.kansas, 'Kansas', 'NAME', 'Image'),
-                fetchGenericGeoJSON(ENDPOINTS.northDakota, 'North Dakota', 'name', 'imageUrl'),
-                fetchArkansas(),
-                fetchSouthDakota(),
-                fetchMaryland(),
-                fetchOhio()
+                fetchGenericGeoJSON(ENDPOINTS.northDakota, 'North Dakota', 'name', 'imageUrl')
             ]);
 
             updateProgress(70, 'Parsing Data...');
 
             allCameras = [];
-            results.forEach(result => {
+            results.forEach((result, index) => {
                 if (result.status === 'fulfilled') {
-                    allCameras = [...allCameras, ...result.value];
+                    const cams = result.value;
+                    allCameras = [...allCameras, ...cams];
+                    console.log(`Feed ${index} loaded: ${cams.length} cameras`);
+                } else {
+                    console.error(`Feed ${index} failed:`, result.reason);
                 }
             });
 
@@ -666,8 +580,6 @@
                 document.getElementById('loading').classList.add('hidden');
             }, 500);
         }
-
-        // --- Map Functions ---
 
         function createMarkerIcon() {
             return L.divIcon({
@@ -755,8 +667,6 @@
             }
         }
 
-        // --- Event Listeners ---
-
         document.getElementById('search-input').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
             filteredCameras = allCameras.filter(cam => 
@@ -785,19 +695,10 @@
             const apiKeyInput = document.getElementById('api-key');
             let apiKey = apiKeyInput.value.trim();
             
-            // Try to get from local storage if input is empty but we have it saved
-            if (!apiKey) {
-                apiKey = localStorage.getItem('maptiler_key');
-            }
-
             if (!apiKey) {
                 alert('Please enter a MapTiler API Key');
                 return;
             }
-
-            // Save key for next time
-            localStorage.setItem('maptiler_key', apiKey);
-            apiKeyInput.value = apiKey; // Ensure input shows it
             
             document.getElementById('api-key-modal').style.display = 'none';
 
@@ -816,16 +717,6 @@
             await loadAllCameras();
             addCamerasToMap();
         }
-
-        // Auto-load if key exists
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedKey = localStorage.getItem('maptiler_key');
-            if (savedKey) {
-                document.getElementById('api-key').value = savedKey;
-                initMap(); // Auto-start the map
-            }
-        });
-
     </script>
 </body>
 </html>
