@@ -491,13 +491,17 @@
             const data = await smartFetch(url);
             if (!data || !data.features) return [];
             
-            return data.features.map(f => ({
-                name: f.properties[nameProp] || 'Unknown Camera',
-                camera_url: f.properties[imgProp],
-                state: stateName,
-                latitude: f.geometry.coordinates[1],
-                longitude: f.geometry.coordinates[0]
-            })).filter(c => c.latitude && c.longitude);
+            return data.features.map(f => {
+                const p = f.properties;
+                return {
+                    name: p[nameProp] || 'Unknown Camera',
+                    // Try the requested prop, then common fallbacks
+                    camera_url: p[imgProp] || p.imageUrl || p.image_url || p.image || p.url,
+                    state: stateName,
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
+                };
+            }).filter(c => c.latitude && c.longitude && c.camera_url);
         }
 
         async function fetchArkansas() {
@@ -505,23 +509,28 @@
             const cameras = Array.isArray(data) ? data : (data?.cameras || []);
             return cameras.map(c => ({
                 name: c.title || c.location || 'Arkansas Camera',
-                camera_url: c.image_url || c.url, 
+                // AR uses 'image' or 'url' often
+                camera_url: c.image || c.image_url || c.url, 
                 state: 'Arkansas',
                 latitude: parseFloat(c.latitude),
                 longitude: parseFloat(c.longitude)
-            })).filter(c => c.latitude && c.longitude);
+            })).filter(c => c.latitude && c.longitude && c.camera_url);
         }
 
         async function fetchSouthDakota() {
             const data = await smartFetch(ENDPOINTS.southDakota);
             if (!data || !data.features) return [];
-            return data.features.map(f => ({
-                name: f.properties.head || f.properties.desc || 'SD Camera',
-                camera_url: f.properties.img || f.properties.url, 
-                state: 'South Dakota',
-                latitude: f.geometry.coordinates[1],
-                longitude: f.geometry.coordinates[0]
-            })).filter(c => c.latitude && c.longitude);
+            return data.features.map(f => {
+                const p = f.properties;
+                return {
+                    name: p.head || p.desc || p.title || 'SD Camera',
+                    // SD icons GeoJSON often uses 'img' or 'url'
+                    camera_url: p.img || p.url || p.image, 
+                    state: 'South Dakota',
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
+                };
+            }).filter(c => c.latitude && c.longitude && c.camera_url);
         }
 
         async function fetchMaryland() {
