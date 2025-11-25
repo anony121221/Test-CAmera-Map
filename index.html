@@ -396,31 +396,22 @@
         let allCameras = [];
         let filteredCameras = [];
         let markersCluster;
-        
-        // Use a CORS proxy to fix "Failed to fetch" errors. 
-        // Government APIs often block direct browser access (CORS).
-        const PROXY_BASE = 'https://api.allorigins.win/raw?url=';
 
         const ENDPOINTS = {
-            // Large dataset (GitHub raw often works without proxy, but proxy ensures consistency)
-            usa_backup: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/master/cameras/USA.json',
+            // The Main USA Feed (GitHub raw - supports CORS naturally)
+            usa_main: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/master/cameras/USA.json',
             
-            // Specific State Feeds (Proxied)
+            // Specific State Feeds
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
             kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson',
             northDakota: 'https://travelfiles.dot.nd.gov/geojson_nc/cameras.json',
             
-            // Problematic States Fixed
+            // Feeds often requiring Proxy
             southDakota: 'https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.cameras.geojson',
             arkansas: 'https://www.idrivearkansas.com/datasets/cameras.json', 
             maryland: 'https://chart.maryland.gov/DataFeeds/GetCamerasJson',
             ohio: 'https://publicapi.ohgo.com/api/v1/cameraimages?apiKey=f0e1bf7e-4578-46eb-a3f1-0a4de770f89d'
-        };
-
-        // Helper to wrap URL in proxy if needed
-        const getProxiedUrl = (url) => {
-            return `${PROXY_BASE}${encodeURIComponent(url)}`;
         };
 
         function updateProgress(percent, text) {
@@ -428,107 +419,144 @@
             document.getElementById('loading-text').textContent = text;
         }
 
-        // --- Fetch Functions ---
+        // --- Smart Fetch System ---
+        // Tries direct fetch first. If CORS fails, switches to Proxy.
+        
+        async function smartFetch(url) {
+            // 1. Try Direct
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for direct
+                
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    return await response.json();
+                }
+            } catch (error) {
+                // Ignore error, proceed to proxy
+                // console.log(`Direct access failed for ${url}, trying proxy...`);
+            }
+
+            // 2. Try Primary Proxy (AllOrigins)
+            try {
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                if (response.ok) return await response.json();
+            } catch (error) {
+                // console.warn('Primary proxy failed');
+            }
+
+            // 3. Try Backup Proxy (CorsProxy.io)
+            try {
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                if (response.ok) return await response.json();
+            } catch (error) {
+                console.error(`All fetch methods failed for ${url}`);
+                return null;
+            }
+        }
+
+        // --- Fetch Wrappers ---
+
+        async function fetchUSAMain() {
+            const data = await smartFetch(ENDPOINTS.usa_main);
+            if (!data) return [];
+            
+            const cameras = [];
+            // The data is structured as { "StateName": { "CountyName": [ {url, description, latitude, longitude}... ] } }
+            Object.keys(data).forEach(state => {
+                const counties = data[state];
+                Object.keys(counties).forEach(county => {
+                    const cams = counties[county];
+                    cams.forEach(cam => {
+                        if (cam.latitude && cam.longitude) {
+                            cameras.push({
+                                name: cam.description || 'Traffic Camera',
+                                camera_url: cam.url,
+                                state: state,
+                                latitude: cam.latitude,
+                                longitude: cam.longitude
+                            });
+                        }
+                    });
+                });
+            });
+            return cameras;
+        }
 
         async function fetchGenericGeoJSON(url, stateName, nameProp, imgProp) {
-            try {
-                const res = await fetch(getProxiedUrl(url));
-                const data = await res.json();
-                return (data.features || []).map(f => ({
-                    name: f.properties[nameProp] || 'Unknown Camera',
-                    camera_url: f.properties[imgProp],
-                    state: stateName,
-                    latitude: f.geometry.coordinates[1],
-                    longitude: f.geometry.coordinates[0]
-                })).filter(c => c.latitude && c.longitude);
-            } catch (e) {
-                console.warn(`Failed to load ${stateName}`, e);
-                return [];
-            }
+            const data = await smartFetch(url);
+            if (!data || !data.features) return [];
+            
+            return data.features.map(f => ({
+                name: f.properties[nameProp] || 'Unknown Camera',
+                camera_url: f.properties[imgProp],
+                state: stateName,
+                latitude: f.geometry.coordinates[1],
+                longitude: f.geometry.coordinates[0]
+            })).filter(c => c.latitude && c.longitude);
         }
 
         async function fetchArkansas() {
-            try {
-                // IDriveArkansas JSON format
-                const res = await fetch(getProxiedUrl(ENDPOINTS.arkansas));
-                const data = await res.json();
-                // Check if data is array or object with 'cameras' property
-                const cameras = Array.isArray(data) ? data : (data.cameras || []);
-                
-                return cameras.map(c => ({
-                    name: c.title || c.location || 'Arkansas Camera',
-                    camera_url: c.image_url || c.url, 
-                    state: 'Arkansas',
-                    latitude: parseFloat(c.latitude),
-                    longitude: parseFloat(c.longitude)
-                })).filter(c => c.latitude && c.longitude);
-            } catch (e) {
-                console.warn('Failed to load Arkansas', e);
-                return [];
-            }
+            const data = await smartFetch(ENDPOINTS.arkansas);
+            const cameras = Array.isArray(data) ? data : (data?.cameras || []);
+            return cameras.map(c => ({
+                name: c.title || c.location || 'Arkansas Camera',
+                camera_url: c.image_url || c.url, 
+                state: 'Arkansas',
+                latitude: parseFloat(c.latitude),
+                longitude: parseFloat(c.longitude)
+            })).filter(c => c.latitude && c.longitude);
         }
 
         async function fetchSouthDakota() {
-            try {
-                // SD often returns GeoJSON but with specific properties
-                const res = await fetch(getProxiedUrl(ENDPOINTS.southDakota));
-                const data = await res.json();
-                return (data.features || []).map(f => ({
-                    name: f.properties.head || f.properties.desc || 'SD Camera',
-                    // SD usually puts the relative URL in 'img' or 'url'
-                    camera_url: f.properties.img || f.properties.url, 
-                    state: 'South Dakota',
-                    latitude: f.geometry.coordinates[1],
-                    longitude: f.geometry.coordinates[0]
-                })).filter(c => c.latitude && c.longitude);
-            } catch (e) {
-                console.warn('Failed to load South Dakota', e);
-                return [];
-            }
+            const data = await smartFetch(ENDPOINTS.southDakota);
+            if (!data || !data.features) return [];
+            return data.features.map(f => ({
+                name: f.properties.head || f.properties.desc || 'SD Camera',
+                camera_url: f.properties.img || f.properties.url, 
+                state: 'South Dakota',
+                latitude: f.geometry.coordinates[1],
+                longitude: f.geometry.coordinates[0]
+            })).filter(c => c.latitude && c.longitude);
         }
 
         async function fetchMaryland() {
-            try {
-                const res = await fetch(getProxiedUrl(ENDPOINTS.maryland));
-                const data = await res.json();
-                return (data || []).map(c => ({
-                    name: c.description || 'MD Camera',
-                    camera_url: c.publicVideoURL || c.opRoadImageURL,
-                    state: 'Maryland',
-                    latitude: c.lat,
-                    longitude: c.lon
-                })).filter(c => c.latitude && c.longitude);
-            } catch (e) {
-                console.warn('Failed to load Maryland', e);
-                return [];
-            }
+            const data = await smartFetch(ENDPOINTS.maryland);
+            if (!Array.isArray(data)) return [];
+            return data.map(c => ({
+                name: c.description || 'MD Camera',
+                camera_url: c.publicVideoURL || c.opRoadImageURL,
+                state: 'Maryland',
+                latitude: c.lat,
+                longitude: c.lon
+            })).filter(c => c.latitude && c.longitude);
         }
 
         async function fetchOhio() {
-            try {
-                const res = await fetch(getProxiedUrl(ENDPOINTS.ohio));
-                const data = await res.json();
-                return (data || []).map(c => ({
-                    name: c.title || 'Ohio Camera',
-                    camera_url: c.imageURL,
-                    state: 'Ohio',
-                    latitude: c.latitude,
-                    longitude: c.longitude
-                })).filter(c => c.latitude && c.longitude);
-            } catch (e) {
-                console.warn('Failed to load Ohio', e);
-                return [];
-            }
+            const data = await smartFetch(ENDPOINTS.ohio);
+            if (!Array.isArray(data)) return [];
+            return data.map(c => ({
+                name: c.title || 'Ohio Camera',
+                camera_url: c.imageURL,
+                state: 'Ohio',
+                latitude: c.latitude,
+                longitude: c.longitude
+            })).filter(c => c.latitude && c.longitude);
         }
 
         // --- Main Load Function ---
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
-            updateProgress(10, 'Initiating Connections...');
+            updateProgress(10, 'Connecting to feeds...');
 
-            // We use Promise.allSettled so if one state fails, the others still load
+            // Run fetches in parallel, but fail safely
             const results = await Promise.allSettled([
+                fetchUSAMain(), // Returns thousands of cams
                 fetchGenericGeoJSON(ENDPOINTS.texas, 'Texas', 'camera_id', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.oklahoma, 'Oklahoma', 'name', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.kansas, 'Kansas', 'NAME', 'Image'),
@@ -539,7 +567,7 @@
                 fetchOhio()
             ]);
 
-            updateProgress(80, 'Processing Data...');
+            updateProgress(70, 'Parsing Data...');
 
             allCameras = [];
             results.forEach(result => {
@@ -548,17 +576,19 @@
                 }
             });
 
-            // Final Cleanup and Sorting
-            allCameras = allCameras.filter(c => c.camera_url); // Remove ones with no images
+            // Deduplication (Simple version based on location to prevent stacking)
+            // We skip this for speed now, but filter empty URLs
+            allCameras = allCameras.filter(c => c.camera_url);
+
             filteredCameras = [...allCameras];
 
-            // Update UI
-            updateProgress(100, 'Rendering...');
+            updateProgress(90, 'Rendering Map...');
             document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
             
             // Populate State Filter
             const states = [...new Set(allCameras.map(c => c.state))].sort();
             const filterSelect = document.getElementById('state-filter');
+            filterSelect.innerHTML = '<option value="">All States</option>';
             states.forEach(state => {
                 const opt = document.createElement('option');
                 opt.value = state;
@@ -568,7 +598,7 @@
 
             setTimeout(() => {
                 document.getElementById('loading').classList.add('hidden');
-            }, 800);
+            }, 500);
         }
 
         // --- Map Functions ---
@@ -595,8 +625,8 @@
             }
 
             markersCluster = L.markerClusterGroup({
-                chunkedLoading: true, // Better performance for large datasets
-                maxClusterRadius: 50,
+                chunkedLoading: true, 
+                maxClusterRadius: 60,
                 spiderfyOnMaxZoom: true,
                 disableClusteringAtZoom: 16
             });
@@ -613,7 +643,7 @@
                         <div class="popup-image-container">
                             <img src="${cam.camera_url}" 
                                  onload="this.style.display='block'" 
-                                 onerror="this.parentElement.innerHTML='<div class=\'popup-error\'>Image Temporarily Unavailable</div>'"
+                                 onerror="this.parentElement.innerHTML='<div class=\'popup-error\'>Image Unavailable</div>'"
                                  alt="Traffic Cam">
                         </div>
                         <a href="${cam.camera_url}" target="_blank">Open Image in New Tab</a>
@@ -633,7 +663,6 @@
             const listContainer = document.getElementById('camera-list');
             listContainer.innerHTML = '';
             
-            // Limit list to 100 for performance
             const displayCameras = filteredCameras.slice(0, 100);
             
             displayCameras.forEach(cam => {
@@ -645,7 +674,6 @@
                 `;
                 item.onclick = () => {
                     map.setView([cam.latitude, cam.longitude], 14);
-                    // Optional: Open popup logic here if reference stored
                 };
                 listContainer.appendChild(item);
             });
@@ -676,12 +704,14 @@
             const state = e.target.value;
             if (state) {
                 filteredCameras = allCameras.filter(cam => cam.state === state);
-                // Center map on the first camera of that state
                 if (filteredCameras.length > 0) {
-                    map.setView([filteredCameras[0].latitude, filteredCameras[0].longitude], 7);
+                    // Calculate bounds for state
+                    const bounds = L.latLngBounds(filteredCameras.map(c => [c.latitude, c.longitude]));
+                    map.fitBounds(bounds);
                 }
             } else {
                 filteredCameras = [...allCameras];
+                map.setView([39.8283, -98.5795], 5);
             }
             addCamerasToMap();
         });
@@ -699,7 +729,7 @@
             map = L.map('map', {
                 zoomControl: false,
                 preferCanvas: true
-            }).setView([39.8283, -98.5795], 5); // Center of US
+            }).setView([39.8283, -98.5795], 5);
 
             L.control.zoom({ position: 'topright' }).addTo(map);
 
@@ -712,13 +742,10 @@
             addCamerasToMap();
         }
 
-        // Check for saved key
         window.addEventListener('DOMContentLoaded', () => {
             const savedKey = localStorage.getItem('maptiler_key');
             if (savedKey) {
                 document.getElementById('api-key').value = savedKey;
-                // Auto-load if key exists
-                // initMap(); 
             }
         });
 
