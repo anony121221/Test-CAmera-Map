@@ -407,7 +407,8 @@
             
             // New Additions
             alabama: 'https://api.algotraffic.com/v4.0/Cameras/Layer?includeGeometry=true',
-            mississippi: 'https://raw.githubusercontent.com/anony121221/maps-data/refs/heads/main/mdot_traffic_cameras.geojson',
+            // FIXED: Removed 'refs/heads/' from URL to make it a valid raw GitHub link
+            mississippi: 'https://raw.githubusercontent.com/anony121221/maps-data/main/mdot_traffic_cameras.geojson',
 
             // Specific State Feeds
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
@@ -538,7 +539,7 @@
                 // MDOT GeoJSON usually has 'url' or 'html_url' or 'img'
                 return {
                     name: p.title || p.name || 'Mississippi Camera',
-                    camera_url: p.url || p.image_url || p.imageUrl || p.img,
+                    camera_url: p.url || p.image_url || p.imageUrl || p.img || p.URL, // Added extra check
                     state: 'Mississippi',
                     latitude: f.geometry.coordinates[1],
                     longitude: f.geometry.coordinates[0]
