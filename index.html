@@ -466,8 +466,10 @@
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
             kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson',
-            arkansas: 'https://layers.idrivearkansas.com/cameras.geojson',
-            ohio: `https://publicapi.ohgo.com/api/v1/cameraimages?apiKey=${OHIO_API_KEY}`
+            ohio: `https://publicapi.ohgo.com/api/v1/cameraimages?apiKey=${OHIO_API_KEY}`,
+            maryland: 'https://chart.maryland.gov/DataFeeds/GetCamerasJson',
+            northDakota: 'https://travelfiles.dot.nd.gov/geojson_nc/cameras.json',
+            southDakota: 'https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.cameras.geojson'
         };
 
         function updateProgress(percent, text) {
@@ -543,19 +545,53 @@
             }
         }
 
-        async function fetchArkansasCameras() {
+        async function fetchMarylandCameras() {
             try {
-                const response = await fetch(ENDPOINTS.arkansas);
+                const response = await fetch(ENDPOINTS.maryland);
+                const data = await response.json();
+                return (data || []).map(cam => ({
+                    name: cam.name || cam.description || 'Unknown',
+                    camera_url: cam.publicVideoURL,
+                    state: 'Maryland',
+                    latitude: cam.lat,
+                    longitude: cam.lon
+                })).filter(c => c.latitude && c.longitude);
+            } catch (error) {
+                console.error('Error fetching Maryland cameras:', error);
+                return [];
+            }
+        }
+
+        async function fetchNorthDakotaCameras() {
+            try {
+                const response = await fetch(ENDPOINTS.northDakota);
                 const data = await response.json();
                 return (data.features || []).map(f => ({
-                    name: f.properties.name || 'Unknown',
-                    camera_url: f.properties.hls_stream_protected,
-                    state: 'Arkansas',
+                    name: f.properties.name || f.properties.title || 'Unknown',
+                    camera_url: f.properties.url || f.properties.imageUrl,
+                    state: 'North Dakota',
                     latitude: f.geometry.coordinates[1],
                     longitude: f.geometry.coordinates[0]
                 })).filter(c => c.latitude && c.longitude);
             } catch (error) {
-                console.error('Error fetching Arkansas cameras:', error);
+                console.error('Error fetching North Dakota cameras:', error);
+                return [];
+            }
+        }
+
+        async function fetchSouthDakotaCameras() {
+            try {
+                const response = await fetch(ENDPOINTS.southDakota);
+                const data = await response.json();
+                return (data.features || []).map(f => ({
+                    name: f.properties.name || f.properties.title || 'Unknown',
+                    camera_url: f.properties.url || f.properties.imageUrl,
+                    state: 'South Dakota',
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
+                })).filter(c => c.latitude && c.longitude);
+            } catch (error) {
+                console.error('Error fetching South Dakota cameras:', error);
                 return [];
             }
         }
@@ -580,31 +616,39 @@
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
             
-            updateProgress(10, 'Fetching USA cameras...');
+            updateProgress(8, 'Fetching USA cameras...');
             const usaCameras = await fetchUSACameras();
             
-            updateProgress(25, 'Fetching Texas cameras...');
+            updateProgress(18, 'Fetching Texas cameras...');
             const texasCameras = await fetchTexasCameras();
             
-            updateProgress(40, 'Fetching Oklahoma cameras...');
+            updateProgress(28, 'Fetching Oklahoma cameras...');
             const oklahomaCameras = await fetchArcGISCameras(ENDPOINTS.oklahoma, 'Oklahoma');
             
-            updateProgress(55, 'Fetching Kansas cameras...');
+            updateProgress(38, 'Fetching Kansas cameras...');
             const kansasCameras = await fetchArcGISCameras(ENDPOINTS.kansas, 'Kansas');
             
-            updateProgress(70, 'Fetching Arkansas cameras...');
-            const arkansasCameras = await fetchArkansasCameras();
-            
-            updateProgress(85, 'Fetching Ohio cameras...');
+            updateProgress(48, 'Fetching Ohio cameras...');
             const ohioCameras = await fetchOhioCameras();
+
+            updateProgress(58, 'Fetching Maryland cameras...');
+            const marylandCameras = await fetchMarylandCameras();
+            
+            updateProgress(70, 'Fetching North Dakota cameras...');
+            const northDakotaCameras = await fetchNorthDakotaCameras();
+            
+            updateProgress(85, 'Fetching South Dakota cameras...');
+            const southDakotaCameras = await fetchSouthDakotaCameras();
 
             allCameras = [
                 ...usaCameras, 
                 ...texasCameras, 
                 ...oklahomaCameras, 
                 ...kansasCameras,
-                ...arkansasCameras,
-                ...ohioCameras
+                ...ohioCameras,
+                ...marylandCameras,
+                ...northDakotaCameras,
+                ...southDakotaCameras
             ];
             filteredCameras = [...allCameras];
 
