@@ -316,6 +316,10 @@
             width: 90%;
         }
         
+        .modal-content h2 {
+            margin-bottom: 10px;
+        }
+        
         .modal-content input {
             width: 100%;
             padding: 12px;
@@ -334,6 +338,11 @@
             border: none;
             border-radius: 6px;
             cursor: pointer;
+            font-size: 14px;
+        }
+
+        .modal-content button:hover {
+            background: #2563eb;
         }
 
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
@@ -344,17 +353,24 @@
             color: white;
             font-weight: bold;
         }
+
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div id="api-key-modal" class="api-key-modal">
         <div class="modal-content">
             <h2>MapTiler <span style="color: #3b82f6;">API Key</span></h2>
-            <p style="color:#999; margin-top:10px">MapTiler is used for the base map tiles.</p>
+            <p style="color:#999; margin-top:10px">MapTiler provides the base map tiles.</p>
             <input type="text" id="api-key" placeholder="Enter MapTiler API Key">
             <button onclick="initMap()">Load Map</button>
-            <div style="margin-top: 15px; font-size: 12px; color: #666; text-align: center;">
-                <a href="https://www.maptiler.com/" target="_blank" style="color: #3b82f6;">Get free key here</a>
+            <div class="info-text">
+                <a href="https://www.maptiler.com/" target="_blank" style="color: #3b82f6; text-decoration: none;">Get free API key from MapTiler →</a>
             </div>
         </div>
     </div>
@@ -429,7 +445,7 @@
                 console.log(`Direct fetch failed for ${url}, trying proxy...`);
             }
 
-            // Try cors-anywhere style proxy
+            // Try cors proxy
             try {
                 const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 const response = await fetch(proxyUrl);
@@ -438,19 +454,7 @@
                     return JSON.parse(text);
                 }
             } catch (error) {
-                console.log(`Proxy 1 failed for ${url}`);
-            }
-
-            // Try allorigins
-            try {
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                const response = await fetch(proxyUrl);
-                if (response.ok) {
-                    const text = await response.text();
-                    return JSON.parse(text);
-                }
-            } catch (error) {
-                console.error(`All fetch methods failed for ${url}`);
+                console.log(`Proxy failed for ${url}`);
             }
 
             return null;
@@ -466,7 +470,7 @@
                 Object.keys(counties).forEach(county => {
                     const cams = counties[county];
                     cams.forEach(cam => {
-                        if (cam.latitude && cam.longitude) {
+                        if (cam.latitude && cam.longitude && cam.url) {
                             cameras.push({
                                 name: cam.description || 'Traffic Camera',
                                 camera_url: cam.url,
@@ -478,13 +482,43 @@
                     });
                 });
             });
+            console.log(`USA Main cameras loaded: ${cameras.length}`);
+            return cameras;
+        }
+
+        async function fetchMississippi() {
+            const data = await smartFetch(ENDPOINTS.mississippi);
+            if (!data || !data.features) {
+                console.error('Mississippi data not loaded');
+                return [];
+            }
+
+            const cameras = data.features.map(f => {
+                const p = f.properties;
+                const coords = f.geometry?.coordinates;
+                
+                if (!coords || coords.length < 2 || !p.id) return null;
+                
+                // Mississippi uses their own image server - construct URL from camera ID
+                const imageUrl = `https://mdottraffic.com/cameraImages/${p.id}.jpg`;
+                
+                return {
+                    name: p.title || `Mississippi Camera ${p.id}`,
+                    camera_url: imageUrl,
+                    state: 'Mississippi',
+                    latitude: coords[1],
+                    longitude: coords[0]
+                };
+            }).filter(c => c && c.latitude && c.longitude);
+            
+            console.log(`Mississippi cameras loaded: ${cameras.length}`);
             return cameras;
         }
 
         async function fetchArkansas() {
             const data = await smartFetch(ENDPOINTS.arkansas);
             if (!data || !data.features) {
-                console.error('Arkansas data not loaded correctly:', data);
+                console.error('Arkansas data not loaded');
                 return [];
             }
 
@@ -494,11 +528,11 @@
                 
                 if (!coords || coords.length < 2) return null;
                 
-                // Try multiple property names for the image URL
-                const imageUrl = p.url || p.image || p.image_url || p.imageUrl || p.img || p.URL || p.Image;
+                // Try multiple property names
+                const imageUrl = p.url || p.image || p.image_url || p.imageUrl || p.img;
                 
                 return {
-                    name: p.title || p.name || p.Name || p.location || p.description || 'Arkansas Camera',
+                    name: p.title || p.name || p.description || 'Arkansas Camera',
                     camera_url: imageUrl,
                     state: 'Arkansas',
                     latitude: coords[1],
@@ -520,9 +554,11 @@
                 
                 if (!coords || coords.length < 2) return null;
                 
+                const imageUrl = p[imgProp] || p.imageUrl || p.image_url || p.image || p.url;
+                
                 return {
-                    name: p[nameProp] || 'Unknown Camera',
-                    camera_url: p[imgProp] || p.imageUrl || p.image_url || p.image || p.url,
+                    name: p[nameProp] || p.name || 'Camera',
+                    camera_url: imageUrl,
                     state: stateName,
                     latitude: coords[1],
                     longitude: coords[0]
@@ -621,7 +657,7 @@
                         <div class="popup-image-container">
                             <img src="${cam.camera_url}" 
                                  onload="this.style.display='block'" 
-                                 onerror="this.parentElement.innerHTML='<div class=\'popup-error\'>Image Unavailable</div>'"
+                                 onerror="this.parentElement.innerHTML='<div class=\\'popup-error\\'>Image Unavailable</div>'"
                                  alt="Traffic Cam">
                         </div>
                         <a href="${cam.camera_url}" target="_blank">Open Image in New Tab</a>
