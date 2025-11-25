@@ -497,14 +497,12 @@
                 const p = f.properties;
                 const coords = f.geometry?.coordinates;
                 
-                if (!coords || coords.length < 2 || !p.id) return null;
+                if (!coords || coords.length < 2 || !p.web_page_url) return null;
                 
-                // Mississippi uses their own image server - construct URL from camera ID
-                const imageUrl = `https://mdottraffic.com/cameraImages/${p.id}.jpg`;
-                
+                // Use the web_page_url directly - it opens the camera page
                 return {
                     name: p.title || `Mississippi Camera ${p.id}`,
-                    camera_url: imageUrl,
+                    camera_url: p.web_page_url,
                     state: 'Mississippi',
                     latitude: coords[1],
                     longitude: coords[0]
@@ -593,11 +591,13 @@
                 
                 if (!coords || coords.length < 2) return null;
                 
-                // Try multiple property names
-                const imageUrl = p.url || p.image || p.image_url || p.imageUrl || p.img;
+                // Arkansas uses HLS video streams - use the stream URL
+                const imageUrl = p.hls_stream_protected || p.url || p.image;
+                
+                if (!imageUrl) return null;
                 
                 return {
-                    name: p.title || p.name || p.description || 'Arkansas Camera',
+                    name: p.name || p.description || 'Arkansas Camera',
                     camera_url: imageUrl,
                     state: 'Arkansas',
                     latitude: coords[1],
@@ -638,8 +638,8 @@
             const results = await Promise.allSettled([
                 fetchUSAMain(),
                 fetchMississippi(),
+                fetchDriveTexas(),
                 fetchArkansas(),
-                fetchGenericGeoJSON(ENDPOINTS.texas, 'Texas', 'camera_id', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.oklahoma, 'Oklahoma', 'name', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.kansas, 'Kansas', 'NAME', 'Image'),
                 fetchGenericGeoJSON(ENDPOINTS.northDakota, 'North Dakota', 'name', 'imageUrl')
