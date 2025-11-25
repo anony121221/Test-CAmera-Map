@@ -230,7 +230,7 @@
         
         .leaflet-popup-content {
             margin: 15px !important;
-            min-width: 240px;
+            min-width: 260px;
         }
         
         .leaflet-popup-tip {
@@ -264,12 +264,16 @@
             border-radius: 6px;
             margin-top: 10px;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .popup-content img {
             width: 100%;
             height: auto;
             display: block;
+            min-height: 50px;
         }
 
         .popup-error {
@@ -401,6 +405,10 @@
             // The Main USA Feed (GitHub raw - supports CORS naturally)
             usa_main: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/master/cameras/USA.json',
             
+            // New Additions
+            alabama: 'https://api.algotraffic.com/v4.0/Cameras/Layer?includeGeometry=true',
+            mississippi: 'https://raw.githubusercontent.com/anony121221/maps-data/refs/heads/main/mdot_traffic_cameras.geojson',
+
             // Specific State Feeds
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
@@ -426,7 +434,7 @@
             // 1. Try Direct
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for direct
+                const timeoutId = setTimeout(() => controller.abort(), 8000); 
                 
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -436,7 +444,6 @@
                 }
             } catch (error) {
                 // Ignore error, proceed to proxy
-                // console.log(`Direct access failed for ${url}, trying proxy...`);
             }
 
             // 2. Try Primary Proxy (AllOrigins)
@@ -466,7 +473,6 @@
             if (!data) return [];
             
             const cameras = [];
-            // The data is structured as { "StateName": { "CountyName": [ {url, description, latitude, longitude}... ] } }
             Object.keys(data).forEach(state => {
                 const counties = data[state];
                 Object.keys(counties).forEach(county => {
@@ -487,6 +493,59 @@
             return cameras;
         }
 
+        async function fetchAlabama() {
+            const data = await smartFetch(ENDPOINTS.alabama);
+            if (!Array.isArray(data)) return [];
+            
+            return data.map(cam => {
+                // Alabama typically provides an Id, we construct the image URL from it
+                // Logic based on standard ALGO traffic patterns
+                const camId = cam.Id || cam.id || cam.ID;
+                const name = cam.Name || cam.Description || 'Alabama Camera';
+                
+                // Construct URL if not provided directly
+                let imageUrl = cam.Url || cam.Image || cam.ImageUrl;
+                if (!imageUrl && camId) {
+                    imageUrl = `https://api.algotraffic.com/v2/Camera/Image/${camId}`;
+                }
+
+                // Geometry is often nested
+                let lat, lon;
+                if (cam.Geometry && cam.Geometry.Coordinates) {
+                    lon = cam.Geometry.Coordinates[0];
+                    lat = cam.Geometry.Coordinates[1];
+                } else if (cam.Latitude && cam.Longitude) {
+                    lat = cam.Latitude;
+                    lon = cam.Longitude;
+                }
+
+                return {
+                    name: name,
+                    camera_url: imageUrl,
+                    state: 'Alabama',
+                    latitude: lat,
+                    longitude: lon
+                };
+            }).filter(c => c.latitude && c.longitude && c.camera_url);
+        }
+
+        async function fetchMississippi() {
+            const data = await smartFetch(ENDPOINTS.mississippi);
+            if (!data || !data.features) return [];
+
+            return data.features.map(f => {
+                const p = f.properties;
+                // MDOT GeoJSON usually has 'url' or 'html_url' or 'img'
+                return {
+                    name: p.title || p.name || 'Mississippi Camera',
+                    camera_url: p.url || p.image_url || p.imageUrl || p.img,
+                    state: 'Mississippi',
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
+                };
+            }).filter(c => c.latitude && c.longitude && c.camera_url);
+        }
+
         async function fetchGenericGeoJSON(url, stateName, nameProp, imgProp) {
             const data = await smartFetch(url);
             if (!data || !data.features) return [];
@@ -495,7 +554,6 @@
                 const p = f.properties;
                 return {
                     name: p[nameProp] || 'Unknown Camera',
-                    // Try the requested prop, then common fallbacks
                     camera_url: p[imgProp] || p.imageUrl || p.image_url || p.image || p.url,
                     state: stateName,
                     latitude: f.geometry.coordinates[1],
@@ -509,7 +567,6 @@
             const cameras = Array.isArray(data) ? data : (data?.cameras || []);
             return cameras.map(c => ({
                 name: c.title || c.location || 'Arkansas Camera',
-                // AR uses 'image' or 'url' often
                 camera_url: c.image || c.image_url || c.url, 
                 state: 'Arkansas',
                 latitude: parseFloat(c.latitude),
@@ -524,7 +581,6 @@
                 const p = f.properties;
                 return {
                     name: p.head || p.desc || p.title || 'SD Camera',
-                    // SD icons GeoJSON often uses 'img' or 'url'
                     camera_url: p.img || p.url || p.image, 
                     state: 'South Dakota',
                     latitude: f.geometry.coordinates[1],
@@ -563,9 +619,10 @@
             document.getElementById('loading').classList.remove('hidden');
             updateProgress(10, 'Connecting to feeds...');
 
-            // Run fetches in parallel, but fail safely
             const results = await Promise.allSettled([
-                fetchUSAMain(), // Returns thousands of cams
+                fetchUSAMain(),
+                fetchAlabama(),
+                fetchMississippi(),
                 fetchGenericGeoJSON(ENDPOINTS.texas, 'Texas', 'camera_id', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.oklahoma, 'Oklahoma', 'name', 'image_url'),
                 fetchGenericGeoJSON(ENDPOINTS.kansas, 'Kansas', 'NAME', 'Image'),
@@ -585,9 +642,8 @@
                 }
             });
 
-            // Deduplication (Simple version based on location to prevent stacking)
-            // We skip this for speed now, but filter empty URLs
-            allCameras = allCameras.filter(c => c.camera_url);
+            // Filter out items without valid image URLs
+            allCameras = allCameras.filter(c => c.camera_url && c.camera_url.startsWith('http'));
 
             filteredCameras = [...allCameras];
 
@@ -714,7 +770,6 @@
             if (state) {
                 filteredCameras = allCameras.filter(cam => cam.state === state);
                 if (filteredCameras.length > 0) {
-                    // Calculate bounds for state
                     const bounds = L.latLngBounds(filteredCameras.map(c => [c.latitude, c.longitude]));
                     map.fitBounds(bounds);
                 }
@@ -726,13 +781,23 @@
         });
 
         async function initMap() {
-            const apiKey = document.getElementById('api-key').value.trim();
+            const apiKeyInput = document.getElementById('api-key');
+            let apiKey = apiKeyInput.value.trim();
+            
+            // Try to get from local storage if input is empty but we have it saved
+            if (!apiKey) {
+                apiKey = localStorage.getItem('maptiler_key');
+            }
+
             if (!apiKey) {
                 alert('Please enter a MapTiler API Key');
                 return;
             }
 
+            // Save key for next time
             localStorage.setItem('maptiler_key', apiKey);
+            apiKeyInput.value = apiKey; // Ensure input shows it
+            
             document.getElementById('api-key-modal').style.display = 'none';
 
             map = L.map('map', {
@@ -751,10 +816,12 @@
             addCamerasToMap();
         }
 
+        // Auto-load if key exists
         window.addEventListener('DOMContentLoaded', () => {
             const savedKey = localStorage.getItem('maptiler_key');
             if (savedKey) {
                 document.getElementById('api-key').value = savedKey;
+                initMap(); // Auto-start the map
             }
         });
 
