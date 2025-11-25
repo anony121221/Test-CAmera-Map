@@ -417,7 +417,7 @@
             usa_main: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/master/cameras/USA.json',
             mississippi: 'https://raw.githubusercontent.com/anony121221/maps-data/main/mdot_traffic_cameras.geojson',
             arkansas: 'https://layers.idrivearkansas.com/cameras.geojson',
-            texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
+            driveTexas: 'https://api.drupal-sites-csa.txdot.gov/api/v2/cameras?api_key=829ca858-ef46-430a-a010-e2e60857ef4e',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
             kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson',
             northDakota: 'https://travelfiles.dot.nd.gov/geojson_nc/cameras.json'
@@ -512,6 +512,71 @@
             }).filter(c => c && c.latitude && c.longitude);
             
             console.log(`Mississippi cameras loaded: ${cameras.length}`);
+            return cameras;
+        }
+
+        async function fetchMississippi() {
+            const data = await smartFetch(ENDPOINTS.mississippi);
+            if (!data || !data.features) {
+                console.error('Mississippi data not loaded');
+                return [];
+            }
+
+            const cameras = data.features.map(f => {
+                const p = f.properties;
+                const coords = f.geometry?.coordinates;
+                
+                if (!coords || coords.length < 2 || !p.id) return null;
+                
+                // Mississippi uses their own image server - construct URL from camera ID
+                const imageUrl = `https://mdottraffic.com/cameraImages/${p.id}.jpg`;
+                
+                return {
+                    name: p.title || `Mississippi Camera ${p.id}`,
+                    camera_url: imageUrl,
+                    state: 'Mississippi',
+                    latitude: coords[1],
+                    longitude: coords[0]
+                };
+            }).filter(c => c && c.latitude && c.longitude);
+            
+            console.log(`Mississippi cameras loaded: ${cameras.length}`);
+            return cameras;
+        }
+
+        async function fetchDriveTexas() {
+            const data = await smartFetch(ENDPOINTS.driveTexas);
+            if (!data || !Array.isArray(data)) {
+                console.error('DriveTexas data not loaded correctly');
+                return [];
+            }
+
+            const cameras = data.map(cam => {
+                // DriveTexas API structure
+                const lat = cam.field_latitude || cam.latitude;
+                const lon = cam.field_longitude || cam.longitude;
+                const name = cam.title || cam.field_camera_name || 'Texas Camera';
+                
+                // Get image URL - try multiple possible fields
+                let imageUrl = cam.field_image_url || cam.image_url || cam.field_camera_view;
+                
+                // If image URL exists and doesn't start with http, prepend base URL
+                if (imageUrl && !imageUrl.startsWith('http')) {
+                    imageUrl = `https://its.txdot.gov${imageUrl}`;
+                }
+                
+                if (!lat || !lon || !imageUrl) return null;
+                
+                return {
+                    name: name,
+                    camera_url: imageUrl,
+                    state: 'Texas',
+                    latitude: parseFloat(lat),
+                    longitude: parseFloat(lon)
+                };
+            }).filter(c => c && c.latitude && c.longitude && c.camera_url);
+            
+            console.log(`DriveTexas cameras loaded: ${cameras.length}`);
             return cameras;
         }
 
