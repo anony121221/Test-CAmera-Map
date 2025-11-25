@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Traffic Camera Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <style>
         * {
             margin: 0;
@@ -27,7 +30,6 @@
             left: 380px;
         }
         
-        /* Header */
         .header {
             position: fixed;
             top: 0;
@@ -71,9 +73,6 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
         
         .btn-weather {
@@ -86,7 +85,6 @@
             color: white;
         }
         
-        /* Sidebar */
         .sidebar {
             position: fixed;
             top: 60px;
@@ -248,7 +246,6 @@
             display: none;
         }
         
-        /* Leaflet popup styling */
         .leaflet-popup-content-wrapper {
             background: #1a1a1a !important;
             color: #fff !important;
@@ -308,11 +305,6 @@
             font-weight: 500;
         }
         
-        .popup-content a:hover {
-            background: #2563eb;
-        }
-        
-        /* Scrollbar */
         .sidebar::-webkit-scrollbar {
             width: 8px;
         }
@@ -324,10 +316,6 @@
         .sidebar::-webkit-scrollbar-thumb {
             background: #3a3a3a;
             border-radius: 4px;
-        }
-        
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: #4a4a4a;
         }
 
         .api-key-modal {
@@ -385,9 +373,25 @@
             font-weight: 500;
             cursor: pointer;
         }
-        
-        .modal-content button:hover {
-            background: #2563eb;
+
+        /* Cluster styling */
+        .marker-cluster-small {
+            background-color: rgba(59, 130, 246, 0.6);
+        }
+        .marker-cluster-small div {
+            background-color: rgba(59, 130, 246, 0.8);
+        }
+        .marker-cluster-medium {
+            background-color: rgba(59, 130, 246, 0.6);
+        }
+        .marker-cluster-medium div {
+            background-color: rgba(59, 130, 246, 0.8);
+        }
+        .marker-cluster-large {
+            background-color: rgba(59, 130, 246, 0.6);
+        }
+        .marker-cluster-large div {
+            background-color: rgba(59, 130, 246, 0.8);
         }
     </style>
 </head>
@@ -433,8 +437,8 @@
             <div class="filter-section">
                 <div class="filter-label">AUTHORIZATION</div>
                 <div class="toggle-group">
-                    <button class="toggle-btn active" id="auth-authorized">✓ Authorized</button>
-                    <button class="toggle-btn" id="auth-public">✕ Public</button>
+                    <button class="toggle-btn active">✓ Authorized</button>
+                    <button class="toggle-btn">✕ Public</button>
                 </div>
             </div>
             
@@ -452,18 +456,18 @@
         let map;
         let allCameras = [];
         let filteredCameras = [];
-        let markersLayer;
+        let markersCluster;
         let apiKey;
+
+        const OHIO_API_KEY = 'f0e1bf7e-4578-46eb-a3f1-0a4de770f89d';
 
         const ENDPOINTS = {
             usa: 'https://raw.githubusercontent.com/AidanWelch/OpenTrafficCamMap/refs/heads/master/cameras/USA.json',
             texas: 'https://services7.arcgis.com/bF49JeI2xZRhCsD9/ArcGIS/rest/services/TxDoT_Cameras/FeatureServer/0/query?where=1=1&outFields=*&f=geojson',
             oklahoma: 'https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Traffic_Signals_Cameras_1/FeatureServer/1/query?where=1=1&outFields=*&f=geojson',
             kansas: 'https://maps.opkansas.org/mapping/rest/services/MapViewer/Traffic_Cameras/MapServer/0/query?where=1=1&outFields=*&f=geojson',
-            georgia: 'https://511ga.org/api/v2/get/cameras',
-            louisiana: 'https://www.511la.org/api/v2/get/cameras',
-            colorado: 'https://data.cotrip.org/xml/camera.xml',
-            virginia: 'https://511virginia.org/data/cameras/get'
+            arkansas: 'https://layers.idrivearkansas.com/cameras.geojson',
+            ohio: `https://publicapi.ohgo.com/api/v1/cameraimages?apiKey=${OHIO_API_KEY}`
         };
 
         function updateProgress(percent, text) {
@@ -486,22 +490,35 @@
                                 cameras.push({
                                     name: cam.description || 'Unknown Camera',
                                     camera_url: cam.url,
-                                    description: cam.description,
                                     state: state,
                                     county: county,
                                     latitude: cam.latitude,
-                                    longitude: cam.longitude,
-                                    direction: cam.direction || 'N/A',
-                                    format: cam.format
+                                    longitude: cam.longitude
                                 });
                             }
                         });
                     });
                 });
-                
                 return cameras;
             } catch (error) {
                 console.error('Error fetching USA cameras:', error);
+                return [];
+            }
+        }
+
+        async function fetchTexasCameras() {
+            try {
+                const response = await fetch(ENDPOINTS.texas);
+                const data = await response.json();
+                return (data.features || []).map(f => ({
+                    name: f.properties.camera_id || f.properties.CAMERA_ID || 'Unknown',
+                    camera_url: f.properties.snapshot_url || f.properties.image_url,
+                    state: 'Texas',
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
+                })).filter(c => c.latitude && c.longitude);
+            } catch (error) {
+                console.error('Error fetching Texas cameras:', error);
                 return [];
             }
         }
@@ -512,108 +529,94 @@
                 const data = await response.json();
                 return (data.features || []).map(f => {
                     const props = f.properties;
-                    let name, cameraUrl, description;
-
-                    if (stateName === 'Texas') {
-                        name = props.camera_id || props.CAMERA_ID || props.name || 'Unknown Camera';
-                        cameraUrl = props.snapshot_url || props.image_url || props.url;
-                        description = props.location || props.LOCATION || '';
-                    } else if (stateName === 'Oklahoma') {
-                        name = props.Name || props.NAME || props.camera_name || 'Unknown Camera';
-                        cameraUrl = props.ImageURL || props.image_url || props.url;
-                        description = props.Location || props.LOCATION || '';
-                    } else if (stateName === 'Kansas') {
-                        name = props.NAME || props.name || props.camera_name || 'Unknown Camera';
-                        cameraUrl = props.ImageURL || props.image_url || props.url;
-                        description = props.LOCATION || props.location || '';
-                    }
-
                     return {
-                        name: name,
-                        camera_url: cameraUrl,
-                        description: description,
+                        name: props.Name || props.NAME || props.name || 'Unknown',
+                        camera_url: props.ImageURL || props.image_url,
                         state: stateName,
                         latitude: f.geometry.coordinates[1],
                         longitude: f.geometry.coordinates[0]
                     };
-                });
+                }).filter(c => c.latitude && c.longitude);
             } catch (error) {
-                console.error(`Error fetching ${stateName} cameras:`, error);
+                console.error(`Error fetching ${stateName}:`, error);
                 return [];
             }
         }
 
-        async function fetch511Cameras(url, stateName) {
+        async function fetchArkansasCameras() {
             try {
-                const response = await fetch(url);
+                const response = await fetch(ENDPOINTS.arkansas);
                 const data = await response.json();
-                
-                if (!data || !data.cameras) return [];
-                
-                return data.cameras.map(cam => ({
-                    name: cam.name || cam.title || 'Unknown Camera',
-                    camera_url: cam.url || cam.streamURL || cam.imageURL,
-                    description: cam.description || cam.location || '',
-                    state: stateName,
-                    latitude: cam.latitude || cam.lat,
-                    longitude: cam.longitude || cam.lon || cam.lng
+                return (data.features || []).map(f => ({
+                    name: f.properties.name || 'Unknown',
+                    camera_url: f.properties.hls_stream_protected,
+                    state: 'Arkansas',
+                    latitude: f.geometry.coordinates[1],
+                    longitude: f.geometry.coordinates[0]
                 })).filter(c => c.latitude && c.longitude);
             } catch (error) {
-                console.error(`Error fetching ${stateName} 511 cameras:`, error);
+                console.error('Error fetching Arkansas cameras:', error);
+                return [];
+            }
+        }
+
+        async function fetchOhioCameras() {
+            try {
+                const response = await fetch(ENDPOINTS.ohio);
+                const data = await response.json();
+                return (data || []).map(cam => ({
+                    name: cam.title || cam.name || 'Unknown',
+                    camera_url: cam.imageURL || cam.url,
+                    state: 'Ohio',
+                    latitude: cam.latitude,
+                    longitude: cam.longitude
+                })).filter(c => c.latitude && c.longitude);
+            } catch (error) {
+                console.error('Error fetching Ohio cameras:', error);
                 return [];
             }
         }
 
         async function loadAllCameras() {
             document.getElementById('loading').classList.remove('hidden');
-            updateProgress(5, 'Fetching USA cameras...');
-
+            
+            updateProgress(10, 'Fetching USA cameras...');
             const usaCameras = await fetchUSACameras();
-            updateProgress(15, `Loaded ${usaCameras.length} USA cameras`);
-
-            const texasCameras = await fetchArcGISCameras(ENDPOINTS.texas, 'Texas');
-            updateProgress(30, `Loaded ${texasCameras.length} Texas cameras`);
-
+            
+            updateProgress(25, 'Fetching Texas cameras...');
+            const texasCameras = await fetchTexasCameras();
+            
+            updateProgress(40, 'Fetching Oklahoma cameras...');
             const oklahomaCameras = await fetchArcGISCameras(ENDPOINTS.oklahoma, 'Oklahoma');
-            updateProgress(45, `Loaded ${oklahomaCameras.length} Oklahoma cameras`);
-
+            
+            updateProgress(55, 'Fetching Kansas cameras...');
             const kansasCameras = await fetchArcGISCameras(ENDPOINTS.kansas, 'Kansas');
-            updateProgress(55, `Loaded ${kansasCameras.length} Kansas cameras`);
-
-            const georgiaCameras = await fetch511Cameras(ENDPOINTS.georgia, 'Georgia');
-            updateProgress(65, `Loaded ${georgiaCameras.length} Georgia cameras`);
-
-            const louisianaCameras = await fetch511Cameras(ENDPOINTS.louisiana, 'Louisiana');
-            updateProgress(75, `Loaded ${louisianaCameras.length} Louisiana cameras`);
-
-            const coloradoCameras = await fetch511Cameras(ENDPOINTS.colorado, 'Colorado');
-            updateProgress(85, `Loaded ${coloradoCameras.length} Colorado cameras`);
-
-            const virginiaCameras = await fetch511Cameras(ENDPOINTS.virginia, 'Virginia');
-            updateProgress(95, `Loaded ${virginiaCameras.length} Virginia cameras`);
+            
+            updateProgress(70, 'Fetching Arkansas cameras...');
+            const arkansasCameras = await fetchArkansasCameras();
+            
+            updateProgress(85, 'Fetching Ohio cameras...');
+            const ohioCameras = await fetchOhioCameras();
 
             allCameras = [
                 ...usaCameras, 
                 ...texasCameras, 
                 ...oklahomaCameras, 
                 ...kansasCameras,
-                ...georgiaCameras,
-                ...louisianaCameras,
-                ...coloradoCameras,
-                ...virginiaCameras
+                ...arkansasCameras,
+                ...ohioCameras
             ];
             filteredCameras = [...allCameras];
 
             const uniqueStates = new Set(allCameras.map(c => c.state));
             
-            updateProgress(100, `Total: ${allCameras.length} cameras loaded`);
+            updateProgress(100, `Loaded ${allCameras.length} cameras`);
             
             document.getElementById('total-cameras').textContent = allCameras.length.toLocaleString();
             document.getElementById('total-states').textContent = uniqueStates.size;
             document.getElementById('total-count').textContent = allCameras.length.toLocaleString();
             document.getElementById('showing-count').textContent = allCameras.length.toLocaleString();
 
-            // Populate state filter
             const stateFilter = document.getElementById('state-filter');
             Array.from(uniqueStates).sort().forEach(state => {
                 const option = document.createElement('option');
@@ -644,11 +647,16 @@
         }
 
         function addCamerasToMap() {
-            if (markersLayer) {
-                map.removeLayer(markersLayer);
+            if (markersCluster) {
+                map.removeLayer(markersCluster);
             }
 
-            markersLayer = L.layerGroup();
+            markersCluster = L.markerClusterGroup({
+                maxClusterRadius: 50,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: false,
+                zoomToBoundsOnClick: true
+            });
 
             filteredCameras.forEach(cam => {
                 const marker = L.marker([cam.latitude, cam.longitude], {
@@ -665,29 +673,21 @@
                     popupContent += `<p><strong>County:</strong> ${cam.county}</p>`;
                 }
 
-                if (cam.description) {
-                    popupContent += `<p><strong>Location:</strong> ${cam.description}</p>`;
-                }
-
-                if (cam.direction) {
-                    popupContent += `<p><strong>Direction:</strong> ${cam.direction}</p>`;
-                }
-
                 if (cam.camera_url) {
                     popupContent += `
                         <img src="${cam.camera_url}" alt="Camera view" onerror="this.style.display='none'">
                         <a href="${cam.camera_url}" target="_blank">📹 View Stream/Image</a>
                     `;
                 } else {
-                    popupContent += `<p style="color: #999;">No image/stream available</p>`;
+                    popupContent += `<p style="color: #999;">No image available</p>`;
                 }
 
                 popupContent += `</div>`;
                 marker.bindPopup(popupContent, { maxWidth: 300 });
-                markersLayer.addLayer(marker);
+                markersCluster.addLayer(marker);
             });
 
-            markersLayer.addTo(map);
+            map.addLayer(markersCluster);
             updateCameraList();
         }
 
@@ -701,7 +701,7 @@
                 item.className = 'camera-item online';
                 item.innerHTML = `
                     <div class="camera-name">${cam.name}</div>
-                    <div class="camera-location">${cam.state}${cam.county ? ', ' + cam.county : ''}${cam.direction ? ' • ' + cam.direction : ''}</div>
+                    <div class="camera-location">${cam.state}${cam.county ? ', ' + cam.county : ''}</div>
                 `;
                 item.onclick = () => {
                     map.setView([cam.latitude, cam.longitude], 15);
@@ -719,80 +719,56 @@
                     return;
                 }
 
-                // Save API key to localStorage
                 localStorage.setItem('maptiler_api_key', apiKey);
-
-                console.log('Starting map initialization...');
-                
-                // Hide modal and show loading IMMEDIATELY
                 document.getElementById('api-key-modal').style.display = 'none';
                 document.getElementById('loading').classList.remove('hidden');
 
-                // Small delay to ensure UI updates
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                // Initialize Leaflet map with MapTiler dark style
-                console.log('Creating map...');
                 map = L.map('map').setView([37.0902, -95.7129], 5);
 
                 L.tileLayer(`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=${apiKey}`, {
-                    attribution: '© MapTiler © OpenStreetMap contributors',
+                    attribution: '© MapTiler © OpenStreetMap',
                     maxZoom: 20
                 }).addTo(map);
 
-                console.log('Map created, loading cameras...');
-                // Load all cameras
                 await loadAllCameras();
-                console.log('Cameras loaded, adding to map...');
                 addCamerasToMap();
-                console.log('Complete!');
             } catch (error) {
-                console.error('Error initializing map:', error);
+                console.error('Error:', error);
                 alert('Error loading map: ' + error.message);
                 document.getElementById('api-key-modal').style.display = 'flex';
                 document.getElementById('loading').classList.add('hidden');
             }
         }
 
-        // Search functionality
         document.getElementById('search-input').addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
             filteredCameras = allCameras.filter(cam => 
                 cam.name.toLowerCase().includes(query) ||
                 cam.state.toLowerCase().includes(query) ||
-                (cam.description && cam.description.toLowerCase().includes(query)) ||
                 (cam.county && cam.county.toLowerCase().includes(query))
             );
             document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
             addCamerasToMap();
         });
 
-        // State filter
         document.getElementById('state-filter').addEventListener('change', (e) => {
             const state = e.target.value;
-            if (state) {
-                filteredCameras = allCameras.filter(cam => cam.state === state);
-            } else {
-                filteredCameras = [...allCameras];
-            }
+            filteredCameras = state ? allCameras.filter(cam => cam.state === state) : [...allCameras];
             document.getElementById('showing-count').textContent = filteredCameras.length.toLocaleString();
             addCamerasToMap();
         });
 
-        // Check for saved API key or URL parameter on load
         window.addEventListener('DOMContentLoaded', () => {
-            // Check URL parameter first
             const urlParams = new URLSearchParams(window.location.search);
             const apiKeyFromUrl = urlParams.get('key');
-            
-            // Check localStorage for saved key
             const savedApiKey = localStorage.getItem('maptiler_api_key');
             
             if (apiKeyFromUrl) {
                 document.getElementById('api-key').value = apiKeyFromUrl;
                 initMap();
             } else if (savedApiKey) {
-                // Auto-load with saved API key
                 document.getElementById('api-key').value = savedApiKey;
                 document.getElementById('api-key-modal').style.display = 'none';
                 initMap();
